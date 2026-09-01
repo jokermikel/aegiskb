@@ -1,8 +1,8 @@
-.env
-.venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-aegiskb.db
-test_aegiskb.db
-*.db
+# 默认忽略的文件
+/shelf/
+/workspace.xml
+# 基于编辑器的 HTTP 客户端请求
+/httpRequests/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
