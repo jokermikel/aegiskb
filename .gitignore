@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+aegiskb.db
+test_aegiskb.db
+*.db

@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aegiskb
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: aegis-local-only
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis -d aegiskb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://aegis:aegis-local-only@db:5432/aegiskb
+      JWT_SECRET: local-demo-change-me
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      QWEN_MODEL: ${QWEN_MODEL:-qwen3.8-max}
+      QWEN_REASONING_EFFORT: ${QWEN_REASONING_EFFORT:-none}
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres_data:

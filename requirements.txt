@@ -1,0 +1,16 @@
+# HTTP API 与开发服务器
+fastapi==0.118.0
+uvicorn[standard]==0.37.0
+
+# ORM 与配置
+sqlalchemy==2.0.43
+pydantic-settings==2.10.1
+
+# JWT、百炼兼容客户端、PostgreSQL 驱动
+PyJWT==2.10.1
+openai==1.109.1
+psycopg[binary]==3.2.10
+
+# 测试
+pytest==8.4.2
+httpx==0.28.1
