@@ -1,1 +1,0 @@
-"""AegisKB application package."""
