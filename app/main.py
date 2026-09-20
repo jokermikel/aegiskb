@@ -1,4 +1,5 @@
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -11,49 +12,50 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .agent import risk_action, run_agent, test_qwen_connection
+from .chunking import chunk_text
 from .config import get_settings
-from .db import ApprovalRequest, AuditLog, Base, Chunk, Document, User, engine, get_db
-from .schemas import ApiKeyTestRequest, ApiKeyTestResponse, ApprovalOut, ApprovalDecision, ChatRequest, ChatResponse, DocumentCreate, LoginRequest, TokenResponse, UserOut
+from .db import ApprovalRequest, AuditLog, Chunk, Document, SessionLocal, User, get_db, initialize_database
+from .evaluation import list_evaluation_runs, run_retrieval_evaluation
+from .retrieval import RetrievalMetrics, index_stats
+from .schemas import ApiKeyTestRequest, ApiKeyTestResponse, ApprovalDecision, ApprovalOut, ChatRequest, ChatResponse, DocumentCreate, LoginRequest, RetrievalEvaluationRequest, TokenResponse
 from .security import create_access_token, decode_access_token, hash_password, verify_password
 
-app = FastAPI(title="Aegiskb Enterprise AI Agent", version="1.0.0")
-bearer = HTTPBearer()  # OpenAPI/Swagger 由它生成 Bearer 认证框。
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    initialize_database()
+    with SessionLocal() as db:
+        seed_demo_data(db)
+    yield
+
+
+app = FastAPI(title="AegisKB Enterprise AI Agent", version="1.0.0", lifespan=lifespan)
+bearer = HTTPBearer()
 Db = Annotated[Session, Depends(get_db)]
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 def audit(db: Session, request_id: str, actor_id: int | None, event: str, **metadata) -> None:
-    """把安全相关行为写入可关联 request_id 的审计表。"""
     db.add(AuditLog(request_id=request_id, actor_id=actor_id, event=event, metadata_json=metadata))
     db.commit()
 
 
-def make_chunks(text: str, size: int = 350, overlap: int = 60) -> list[str]:
-    """文档分块并保留 60 字重叠，减少句子恰好在边界被截断的问题。"""
-    clean = " ".join(text.split())
-    return  [clean[i : i + size] for i in range(0, len(clean), size - overlap)]
-
-
 def current_user(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)], db: Db) -> User:
-    """所有需登录接口的统一身份入口。"""
     user = db.get(User, decode_access_token(credentials.credentials))
     if not user:
-        raise HTTPException(status_code = 401, detail = "用户不存在")
+        raise HTTPException(status_code=401, detail="用户不存在")
     return user
 
 
 def require_roles(*roles: str):
-    """生成角色依赖，例如 require_roles('admin')。"""
     def dependency(user: Annotated[User, Depends(current_user)]) -> User:
         if user.role not in roles:
-            raise HTTPException(status_code = 403, detail = "权限不足")
+            raise HTTPException(status_code=403, detail="权限不足")
         return user
     return dependency
 
 
 def seed_demo_data(db: Session) -> None:
-    """仅空数据库时创建三位演示用户和三篇演示文档，防止每次启动重复插入。"""
     if db.scalar(select(User.id).limit(1)):
         return
     users = [
@@ -62,7 +64,7 @@ def seed_demo_data(db: Session) -> None:
         User(email="admin@example.com", password_hash=hash_password("demo-password"), role="admin", department="security", clearance="CONFIDENTIAL"),
     ]
     db.add_all(users)
-    db.flush()  # 获取 users[2].id，供文档 created_by 外键使用。
+    db.flush()
     docs = [
         ("远程办公制度", "all", "INTERNAL", "员工每周可远程办公两天。跨城市长期办公需直属经理批准，并在 HR 系统登记。"),
         ("2026 差旅报销制度", "finance", "CONFIDENTIAL", "国内出差住宿标准：一线城市每晚不超过 800 元，其他城市每晚不超过 500 元。报销须在行程结束后 30 天内提交发票和审批单。"),
@@ -72,16 +74,8 @@ def seed_demo_data(db: Session) -> None:
         document = Document(title=title, department=department, sensitivity=sensitivity, body=body, created_by=users[2].id)
         db.add(document)
         db.flush()
-        db.add_all([Chunk(document_id=document.id, ordinal=i, content=chunk) for i, chunk in enumerate(make_chunks(body))])
+        db.add_all([Chunk(document_id=document.id, ordinal=i, content=chunk) for i, chunk in enumerate(chunk_text(body))])
     db.commit()
-
-
-@app.on_event("startup")
-def startup() -> None:
-    # 教学原型直接建表；生产环境应使用 Alembic 数据库迁移。
-    Base.metadata.create_all(bind=engine)
-    with Session(bind=engine) as db:
-        seed_demo_data(db)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -103,20 +97,16 @@ def login(payload: LoginRequest, db: Db, request: Request) -> TokenResponse:
     return TokenResponse(access_token=create_access_token(user.id))
 
 
-@app.get("/api/v1/auth/me", response_model=UserOut)
-def authenticated_user(user: Annotated[User, Depends(current_user)]) -> UserOut:
-    return UserOut(email=user.email, role=user.role, department=user.department, clearance=user.clearance)
-
-
 @app.post("/api/v1/documents", status_code=201)
 def create_document(payload: DocumentCreate, db: Db, user: Annotated[User, Depends(require_roles("finance", "admin"))]) -> dict:
     document = Document(**payload.model_dump(), created_by=user.id)
     db.add(document)
     db.flush()
-    db.add_all([Chunk(document_id=document.id, ordinal=i, content=chunk) for i, chunk in enumerate(make_chunks(payload.body))])
+    chunks = chunk_text(payload.body)
+    db.add_all([Chunk(document_id=document.id, ordinal=i, content=chunk) for i, chunk in enumerate(chunks)])
     db.commit()
     audit(db, str(uuid.uuid4()), user.id, "DOCUMENT_INGESTED", document_id=document.id, sensitivity=document.sensitivity)
-    return {"id": document.id, "chunks": len(document.chunks), "message": "文档已入库"}
+    return {"id": document.id, "chunks": len(chunks), "message": "文档已入库，向量将在首次检索时建立"}
 
 
 @app.post("/api/v1/agent/chat", response_model=ChatResponse)
@@ -124,7 +114,6 @@ def chat(payload: ChatRequest, request: Request, db: Db, user: Annotated[User, D
     request_id = str(uuid.uuid4())
     action = risk_action(payload.message)
     if action:
-        # 人审优先：此处绝不调用模型，也绝不执行真实导出/删除/发送。
         approval = ApprovalRequest(requester_id=user.id, action=action, payload={"message": payload.message})
         db.add(approval)
         db.commit()
@@ -132,13 +121,54 @@ def chat(payload: ChatRequest, request: Request, db: Db, user: Annotated[User, D
         audit(db, request_id, user.id, "APPROVAL_CREATED", approval_id=approval.id, action=action)
         return ChatResponse(answer=f"该请求属于 {action} 高风险操作，已创建审批单 #{approval.id}。批准前不会执行。", requires_approval=True, approval_id=approval.id, request_id=request_id, mode="approval")
     api_key = request.headers.get("X-DASHSCOPE-API-KEY") or None
-    answer, citations, mode = run_agent(db, user, payload.message, api_key=api_key)
-    audit(db, request_id, user.id, "AGENT_CHAT", mode=mode, citation_count=len(citations))
+    metrics = RetrievalMetrics()
+    answer, citations, mode = run_agent(db, user, payload.message, api_key=api_key, retrieval_metrics=metrics)
+    audit(db, request_id, user.id, "AGENT_CHAT", mode=mode, citation_count=len(citations), **metrics.as_dict())
     return ChatResponse(answer=answer, citations=citations, request_id=request_id, mode=mode)
 
 
+@app.get("/api/v1/retrieval/stats")
+def retrieval_stats(db: Db, _: Annotated[User, Depends(require_roles("admin"))]) -> dict:
+    """Show the selected vector backend and index freshness without exposing text."""
+    return index_stats(db)
+
+
+@app.post("/api/v1/retrieval/evaluations", status_code=201)
+def run_retrieval_eval(
+    payload: RetrievalEvaluationRequest,
+    db: Db,
+    user: Annotated[User, Depends(require_roles("admin"))],
+) -> dict:
+    """Run the checked-in labeled dataset and persist Recall@K/HitRate@K/MRR."""
+    try:
+        result = run_retrieval_evaluation(db, top_k=payload.top_k)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    audit(
+        db,
+        str(uuid.uuid4()),
+        user.id,
+        "RETRIEVAL_EVALUATION_RUN",
+        evaluation_id=result["id"],
+        top_k=result["top_k"],
+        recall_at_k=result["recall_at_k"],
+        hit_rate_at_k=result["hit_rate_at_k"],
+        mrr=result["mrr"],
+    )
+    return result
+
+
+@app.get("/api/v1/retrieval/evaluations")
+def retrieval_evaluations(
+    db: Db,
+    _: Annotated[User, Depends(require_roles("admin"))],
+    limit: int = 20,
+) -> list[dict]:
+    return list_evaluation_runs(db, limit=limit)
+
+
 @app.post("/api/v1/settings/qwen/test", response_model=ApiKeyTestResponse)
-def test_qwen_api_key(payload: ApiKeyTestRequest, _: Annotated[User, Depends(current_user)]) -> ApiKeyTestResponse:
+def test_qwen_api_key(payload: ApiKeyTestRequest, user: Annotated[User, Depends(current_user)]) -> ApiKeyTestResponse:
     connected, message = test_qwen_connection(payload.api_key.strip())
     return ApiKeyTestResponse(connected=connected, message=message, model=get_settings().qwen_model)
 
@@ -146,7 +176,6 @@ def test_qwen_api_key(payload: ApiKeyTestRequest, _: Annotated[User, Depends(cur
 @app.get("/api/v1/approvals", response_model=list[ApprovalOut])
 def list_approvals(db: Db, user: Annotated[User, Depends(current_user)]) -> list[ApprovalRequest]:
     query = select(ApprovalRequest).order_by(ApprovalRequest.created_at.desc())
-    # 普通用户只能看自己发起的审批；admin 才能看全量。
     if user.role != "admin":
         query = query.where(ApprovalRequest.requester_id == user.id)
     return list(db.scalars(query))

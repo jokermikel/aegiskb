@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-09-18T10:29:32.138751+00:00",
+  "base_url": "http://127.0.0.1:8010",
+  "workload": {
+    "message": "国内出差住宿报销标准是多少？",
+    "requests": 40,
+    "concurrency": 2,
+    "warmup": 2,
+    "top_k": 4
+  },
+  "latency_ms": {
+    "count": 40,
+    "min": 4877.31,
+    "mean": 6632.73,
+    "p50": 6254.63,
+    "p95": 8689.64,
+    "p99": 9484.96,
+    "max": 9853.87
+  },
+  "throughput_rps": 0.3,
+  "error_rate": 0.0,
+  "failures": [],
+  "evaluation": {
+    "id": 2,
+    "dataset_hash": "f36b5ce880242a7e4edd1c04c7c742be04a1f60ee147b4cc12a24b54b24416a8",
+    "top_k": 4,
+    "evaluated_cases": 4,
+    "recall_at_k": 1.0,
+    "hit_rate_at_k": 1.0,
+    "pass_rate_at_k": 1.0,
+    "mrr": 1.0,
+    "backend": "faiss",
+    "embedder": "dashscope"
+  }
+}

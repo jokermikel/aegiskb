@@ -1,0 +1,309 @@
+{
+  "id": 1,
+  "dataset_hash": "f36b5ce880242a7e4edd1c04c7c742be04a1f60ee147b4cc12a24b54b24416a8",
+  "top_k": 4,
+  "total_cases": 10,
+  "evaluated_cases": 4,
+  "recall_at_k": 1.0,
+  "hit_rate_at_k": 1.0,
+  "pass_rate_at_k": 1.0,
+  "mrr": 1.0,
+  "backend": "faiss",
+  "embedder": "dashscope",
+  "dim": 1024,
+  "created_at": "2026-09-18 08:40:56.615008",
+  "results": [
+    {
+      "id": "access-001",
+      "relevant_titles": [],
+      "retrieved_titles": [
+        "远程办公制度",
+        "数据分级与客户信息规范"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 2,
+        "scored": 2,
+        "kept": 2,
+        "top_score": 0.0164,
+        "min_score": 0.2,
+        "embedded_now": 3,
+        "latency_ms": 1524,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 2,
+        "keyword_candidates": 0,
+        "fused_candidates": 2,
+        "reranked": false
+      },
+      "excluded_from_retrieval_metrics": true
+    },
+    {
+      "id": "access-002",
+      "relevant_titles": [
+        "2026 差旅报销制度"
+      ],
+      "retrieved_titles": [
+        "2026 差旅报销制度",
+        "远程办公制度",
+        "数据分级与客户信息规范"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 3,
+        "scored": 3,
+        "kept": 3,
+        "top_score": 0.0428,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 137,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 3,
+        "keyword_candidates": 1,
+        "fused_candidates": 3,
+        "reranked": true
+      },
+      "recall_at_k": 1.0,
+      "hit_at_k": true,
+      "passed_at_k": true,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "travel-002",
+      "relevant_titles": [
+        "2026 差旅报销制度"
+      ],
+      "retrieved_titles": [
+        "2026 差旅报销制度",
+        "远程办公制度",
+        "数据分级与客户信息规范"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 3,
+        "scored": 3,
+        "kept": 3,
+        "top_score": 0.0428,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 149,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 3,
+        "keyword_candidates": 1,
+        "fused_candidates": 3,
+        "reranked": true
+      },
+      "recall_at_k": 1.0,
+      "hit_at_k": true,
+      "passed_at_k": true,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "risk-001",
+      "relevant_titles": [],
+      "retrieved_titles": [
+        "数据分级与客户信息规范",
+        "远程办公制度"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 2,
+        "scored": 2,
+        "kept": 2,
+        "top_score": 0.0428,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 176,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 2,
+        "keyword_candidates": 1,
+        "fused_candidates": 2,
+        "reranked": true
+      },
+      "excluded_from_retrieval_metrics": true
+    },
+    {
+      "id": "risk-002",
+      "relevant_titles": [],
+      "retrieved_titles": [
+        "数据分级与客户信息规范",
+        "远程办公制度"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 2,
+        "scored": 2,
+        "kept": 2,
+        "top_score": 0.0428,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 159,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 2,
+        "keyword_candidates": 1,
+        "fused_candidates": 2,
+        "reranked": true
+      },
+      "excluded_from_retrieval_metrics": true
+    },
+    {
+      "id": "grounding-001",
+      "relevant_titles": [],
+      "retrieved_titles": [
+        "远程办公制度",
+        "数据分级与客户信息规范"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 2,
+        "scored": 2,
+        "kept": 2,
+        "top_score": 0.0164,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 180,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 2,
+        "keyword_candidates": 0,
+        "fused_candidates": 2,
+        "reranked": false
+      },
+      "excluded_from_retrieval_metrics": true
+    },
+    {
+      "id": "policy-001",
+      "relevant_titles": [
+        "远程办公制度"
+      ],
+      "retrieved_titles": [
+        "远程办公制度",
+        "数据分级与客户信息规范"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 2,
+        "scored": 2,
+        "kept": 2,
+        "top_score": 0.0428,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 149,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 2,
+        "keyword_candidates": 1,
+        "fused_candidates": 2,
+        "reranked": true
+      },
+      "recall_at_k": 1.0,
+      "hit_at_k": true,
+      "passed_at_k": true,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "policy-002",
+      "relevant_titles": [
+        "数据分级与客户信息规范"
+      ],
+      "retrieved_titles": [
+        "数据分级与客户信息规范",
+        "远程办公制度"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 2,
+        "scored": 2,
+        "kept": 2,
+        "top_score": 0.0428,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 134,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 2,
+        "keyword_candidates": 1,
+        "fused_candidates": 2,
+        "reranked": true
+      },
+      "recall_at_k": 1.0,
+      "hit_at_k": true,
+      "passed_at_k": true,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "audit-001",
+      "relevant_titles": [],
+      "retrieved_titles": [
+        "数据分级与客户信息规范",
+        "远程办公制度"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 2,
+        "scored": 2,
+        "kept": 2,
+        "top_score": 0.0428,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 145,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 2,
+        "keyword_candidates": 1,
+        "fused_candidates": 2,
+        "reranked": true
+      },
+      "excluded_from_retrieval_metrics": true
+    },
+    {
+      "id": "injection-001",
+      "relevant_titles": [],
+      "retrieved_titles": [
+        "数据分级与客户信息规范",
+        "远程办公制度"
+      ],
+      "metrics": {
+        "retrieval_backend": "faiss",
+        "embedder": "dashscope",
+        "dim": 1024,
+        "candidates": 2,
+        "scored": 2,
+        "kept": 2,
+        "top_score": 0.0164,
+        "min_score": 0.2,
+        "embedded_now": 0,
+        "latency_ms": 153,
+        "degraded": false,
+        "retrieval_mode": "hybrid",
+        "vector_candidates": 2,
+        "keyword_candidates": 0,
+        "fused_candidates": 2,
+        "reranked": false
+      },
+      "excluded_from_retrieval_metrics": true
+    }
+  ]
+}

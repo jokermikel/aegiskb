@@ -19,10 +19,6 @@
     .new-chat { border:1px solid #3d725c; color:#f4fbf6; background:#22533f; border-radius:10px; min-height:44px; display:flex; align-items:center; gap:10px; padding:0 14px; font-weight:650; }
     .new-chat:hover { background:#2c654e; }
     .new-chat span { font-size:21px; font-weight:300; line-height:1; }
-    .approval-nav { border:1px solid #3d725c; color:#d8e9de; background:transparent; border-radius:8px; min-height:40px; display:flex; align-items:center; gap:9px; padding:0 12px; text-align:left; }
-    .approval-nav:hover,.approval-nav.active { color:#fff; background:#255941; }
-    .approval-nav em { flex:1; font-style:normal; font-size:13px; font-weight:650; }
-    .approval-count { min-width:22px; height:22px; border-radius:11px; display:grid; place-items:center; padding:0 6px; color:#173f30; background:#b8e7c8; font-size:10px; font-weight:800; }
     .side-label { color:#8eae9d; text-transform:uppercase; font-size:10px; letter-spacing:1.2px; padding:0 9px; }
     .history { display:flex; flex-direction:column; gap:3px; }
     .history-item { display:flex; align-items:center; gap:3px; min-width:0; border-radius:8px; }
@@ -82,37 +78,6 @@
     .send:hover { background:var(--accent-dark); }
     .send:disabled { opacity:.45; cursor:not-allowed; }
     .composer-note { color:#9aa9a0; font-size:10px; text-align:center; padding-top:9px; }
-    .approvals-workspace { width:min(1120px,100%); gap:22px; overflow:auto; }
-    .approval-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
-    .approval-heading h3 { margin:5px 0 7px; font-size:24px; letter-spacing:0; }
-    .approval-heading p { margin:0; color:var(--muted); font-size:13px; }
-    .refresh-approvals { border:1px solid #d7e4dc; background:#fff; color:#486054; border-radius:8px; padding:9px 13px; font-size:12px; }
-    .refresh-approvals:hover { border-color:#9fc8ae; color:var(--accent-dark); }
-    .approval-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border:1px solid var(--line); border-radius:8px; background:#fff; }
-    .summary-item { padding:15px 18px; border-right:1px solid var(--line); }
-    .summary-item:last-child { border-right:0; }
-    .summary-item span { display:block; color:var(--muted); font-size:11px; }
-    .summary-item strong { display:block; margin-top:4px; font-size:22px; }
-    .approval-feedback { min-height:20px; color:var(--muted); font-size:12px; }
-    .approval-feedback.error { color:#b74c3c; }
-    .approval-table-wrap { overflow:auto; border:1px solid var(--line); border-radius:8px; background:#fff; }
-    .approval-table { width:100%; border-collapse:collapse; min-width:760px; }
-    .approval-table th { padding:11px 14px; border-bottom:1px solid var(--line); background:#f6f8f6; color:#68776e; font-size:10px; text-align:left; text-transform:uppercase; font-weight:750; }
-    .approval-table td { padding:14px; border-bottom:1px solid #edf1ee; color:#384a40; font-size:12px; vertical-align:top; }
-    .approval-table tr:last-child td { border-bottom:0; }
-    .approval-id { color:var(--ink); font-weight:750; }
-    .status-pill { display:inline-flex; align-items:center; min-height:24px; border-radius:12px; padding:0 9px; font-size:10px; font-weight:800; }
-    .status-pending { color:#7a5418; background:#fff1d5; }
-    .status-approved { color:#1e6a45; background:#dcf2e4; }
-    .status-rejected { color:#984737; background:#f9e3df; }
-    .decision-box { display:flex; align-items:center; gap:6px; min-width:310px; }
-    .decision-comment { width:150px; border:1px solid #dbe5de; border-radius:7px; padding:7px 8px; color:var(--ink); font-size:11px; }
-    .decision-button { border:1px solid #d7e4dc; border-radius:7px; padding:7px 9px; background:#fff; color:#526359; font-size:11px; white-space:nowrap; }
-    .decision-button.approve { border-color:#9fc9ae; color:#1c6843; }
-    .decision-button.reject { border-color:#e1bbb3; color:#9a4434; }
-    .decision-button:disabled,.refresh-approvals:disabled { opacity:.5; cursor:not-allowed; }
-    .approval-empty { border:1px dashed #cedbd3; border-radius:8px; padding:46px 20px; text-align:center; color:var(--muted); background:#fbfcfb; }
-    .approval-empty strong { display:block; margin-bottom:6px; color:#43564b; font-size:14px; }
     .login-screen { position:fixed; inset:0; display:grid; place-items:center; padding:20px; background:#f3f7f3; z-index:10; }
     .login-card { width:min(430px,100%); background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:35px; }
     .login-card .brand { padding:0; margin-bottom:28px; }
@@ -136,7 +101,7 @@
     .modal-actions .primary { border-color:var(--accent); background:var(--accent); color:#fff; }
     .hidden { display:none !important; }
     @keyframes rise { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
-    @media (max-width:760px) { .sidebar { width:66px; flex-basis:66px; padding:18px 10px; } .brand { padding:0; justify-content:center; } .brand > div:last-child,.new-chat em,.approval-nav em,.side-label,.history,.side-bottom .user-card strong,.side-bottom .user-card small,.side-links { display:none; } .new-chat,.approval-nav { justify-content:center; padding:0; } .approval-count { min-width:20px; padding:0 4px; } .side-bottom { align-items:center; } .user-card { border:0; padding:0; } .topbar { padding:0 17px; } .top-title h2 { font-size:14px; } .status { display:none; } .chip { display:none; } .logout { font-size:11px; } .workspace { padding:27px 16px 18px; } .welcome h3 { font-size:26px; } .suggestions { grid-template-columns:1fr; gap:8px; margin-bottom:18px; } .suggestion { min-height:auto; padding:12px; } .message { max-width:95%; } .approval-heading { align-items:center; } .approval-heading h3 { font-size:20px; } .approval-summary { grid-template-columns:1fr 1fr 1fr; } .summary-item { padding:12px; } .summary-item strong { font-size:18px; } .login-card { padding:27px 22px; } }
+    @media (max-width:760px) { .sidebar { width:66px; flex-basis:66px; padding:18px 10px; } .brand { padding:0; justify-content:center; } .brand > div:last-child,.new-chat em,.side-label,.history,.side-bottom .user-card strong,.side-bottom .user-card small,.side-links { display:none; } .new-chat { justify-content:center; padding:0; } .side-bottom { align-items:center; } .user-card { border:0; padding:0; } .topbar { padding:0 17px; } .top-title h2 { font-size:14px; } .chip { display:none; } .logout { font-size:11px; } .workspace { padding:27px 16px 18px; } .welcome h3 { font-size:26px; } .suggestions { grid-template-columns:1fr; gap:8px; margin-bottom:18px; } .suggestion { min-height:auto; padding:12px; } .message { max-width:95%; } .login-card { padding:27px 22px; } }
   </style>
 </head>
 <body>
@@ -156,7 +121,6 @@
     <aside class="sidebar">
       <div class="brand"><div class="brand-mark">AK</div><div><h1>AegisKB</h1><p>企业知识助手</p></div></div>
       <button id="newChat" class="new-chat"><span>+</span><em>新建对话</em></button>
-      <button id="approvalNav" class="approval-nav" type="button" title="打开审批列表"><span aria-hidden="true">&#10003;</span><em>审批列表</em><span id="approvalCount" class="approval-count">0</span></button>
       <div class="side-label">最近对话</div>
       <div id="history" class="history"></div>
       <div class="side-bottom">
@@ -166,18 +130,11 @@
     </aside>
     <main class="main">
       <header class="topbar"><div class="top-title"><h2 id="conversationTitle">企业制度问答</h2><span class="status"><i></i> 知识库已连接</span></div><div class="top-actions"><span id="clearanceChip" class="chip">CONFIDENTIAL 可见</span><button id="apiKeySettings" class="settings" type="button" title="配置 Qwen API Key">API Key</button><button id="logout" class="logout">退出登录</button></div></header>
-      <section id="chatWorkspace" class="workspace">
+      <section class="workspace">
         <div id="welcome" class="welcome"><div class="welcome-kicker">AegisKB AI ASSISTANT</div><h3>今天想了解哪项公司制度？</h3><p>我会基于你当前的权限检索知识库，并标注答案来源。</p></div>
         <div id="suggestions" class="suggestions"><button class="suggestion" data-question="国内出差住宿标准是多少？"><b>差旅报销</b><span>查询不同城市的住宿标准与提交时限</span></button><button class="suggestion" data-question="每周可以远程办公几天？"><b>远程办公</b><span>了解远程办公天数和审批要求</span></button><button class="suggestion" data-question="请导出全部客户数据"><b>高风险操作</b><span>看看导出客户数据会触发什么流程</span></button></div>
         <div id="messages" class="messages"></div>
         <div class="composer-wrap"><form id="chatForm" class="composer"><textarea id="messageInput" rows="1" placeholder="输入你的问题，例如：差旅住宿报销标准是多少？" aria-label="输入问题"></textarea><button id="sendButton" class="send" type="submit" aria-label="发送">↑</button></form><div class="composer-note">回答来自授权知识库 · 高风险操作需要管理员审批</div></div>
-      </section>
-      <section id="approvalsWorkspace" class="workspace approvals-workspace hidden">
-        <div class="approval-heading"><div><div class="welcome-kicker">APPROVAL WORKFLOW</div><h3>审批列表</h3><p id="approvalDescription">查看你提交的高风险操作审批状态。</p></div><button id="refreshApprovals" class="refresh-approvals" type="button">刷新列表</button></div>
-        <div class="approval-summary" aria-label="审批统计"><div class="summary-item"><span>全部</span><strong id="approvalTotal">0</strong></div><div class="summary-item"><span>待处理</span><strong id="approvalPending">0</strong></div><div class="summary-item"><span>已处理</span><strong id="approvalDecided">0</strong></div></div>
-        <div id="approvalFeedback" class="approval-feedback" aria-live="polite"></div>
-        <div id="approvalTableWrap" class="approval-table-wrap hidden"><table class="approval-table"><thead><tr><th>编号</th><th>请求内容</th><th>提交人</th><th>提交时间</th><th>状态 / 意见</th><th>审批操作</th></tr></thead><tbody id="approvalRows"></tbody></table></div>
-        <div id="approvalEmpty" class="approval-empty hidden"><strong>暂无审批单</strong><span>高风险导出、删除或发送请求会在这里生成审批记录。</span></div>
       </section>
     </main>
   </div>
@@ -199,7 +156,7 @@
     </form>
   </div>
   <script>
-    const state = { token: sessionStorage.getItem('aegiskb_token'), user: null, apiKey: sessionStorage.getItem('aegiskb_dashscope_key') || '', conversations: [], currentId: null, approvals: [], view: 'chat', modalMode: 'create', editingId: null };
+    const state = { token: sessionStorage.getItem('aegiskb_token'), user: null, apiKey: sessionStorage.getItem('aegiskb_dashscope_key') || '', conversations: [], currentId: null, modalMode: 'create', editingId: null };
     const $ = (id) => document.getElementById(id);
     const conversationKey = () => `aegiskb_conversations_${state.user.email}`;
     const currentKey = () => `aegiskb_current_${state.user.email}`;
@@ -209,16 +166,7 @@
     function persistConversations() { if (state.user) localStorage.setItem(conversationKey(), JSON.stringify(state.conversations)); }
     function persistCurrent() { if (!state.user) return; if (state.currentId) localStorage.setItem(currentKey(), state.currentId); else localStorage.removeItem(currentKey()); }
     function currentConversation() { return state.conversations.find(item => item.id === state.currentId) || null; }
-    function showView(view) {
-      state.view = view;
-      const approvalsOpen = view === 'approvals';
-      $('chatWorkspace').classList.toggle('hidden', approvalsOpen);
-      $('approvalsWorkspace').classList.toggle('hidden', !approvalsOpen);
-      $('approvalNav').classList.toggle('active', approvalsOpen);
-      $('conversationTitle').textContent = approvalsOpen ? '审批列表' : currentConversation()?.title || '企业制度问答';
-      if (approvalsOpen) loadApprovals();
-    }
-    function createConversation(title) { const conversation = { id: newId(), title, messages: [], updatedAt: Date.now() }; state.conversations.unshift(conversation); state.currentId = conversation.id; persistConversations(); persistCurrent(); renderHistory(); renderMessages(); showView('chat'); }
+    function createConversation(title) { const conversation = { id: newId(), title, messages: [], updatedAt: Date.now() }; state.conversations.unshift(conversation); state.currentId = conversation.id; persistConversations(); persistCurrent(); renderHistory(); renderMessages(); }
     function loadConversations() {
       const storedValue = localStorage.getItem(conversationKey());
       let stored = [];
@@ -234,7 +182,7 @@
       state.conversations.forEach(conversation => {
         const item = document.createElement('div'); item.className = `history-item${conversation.id === state.currentId ? ' active' : ''}`;
         const open = document.createElement('button'); open.className = 'history-open'; open.type = 'button'; open.textContent = conversation.title; open.title = `打开：${conversation.title}`;
-        open.addEventListener('click', () => { state.currentId = conversation.id; persistCurrent(); renderHistory(); renderMessages(); showView('chat'); });
+        open.addEventListener('click', () => { state.currentId = conversation.id; persistCurrent(); renderHistory(); renderMessages(); });
         const actions = document.createElement('div'); actions.className = 'history-actions';
         const rename = document.createElement('button'); rename.className = 'history-action'; rename.type = 'button'; rename.textContent = '✎'; rename.title = '修改对话名称'; rename.setAttribute('aria-label', '修改对话名称'); rename.addEventListener('click', event => { event.stopPropagation(); openConversationModal('rename', conversation.id); });
         const remove = document.createElement('button'); remove.className = 'history-action'; remove.type = 'button'; remove.textContent = '×'; remove.title = '删除对话'; remove.setAttribute('aria-label', '删除对话'); remove.addEventListener('click', event => { event.stopPropagation(); deleteConversation(conversation.id); });
@@ -242,7 +190,7 @@
       });
     }
     function renderMessages() {
-      const conversation = currentConversation(); $('messages').replaceChildren(); if (state.view === 'chat') $('conversationTitle').textContent = conversation?.title || '企业制度问答';
+      const conversation = currentConversation(); $('messages').replaceChildren(); $('conversationTitle').textContent = conversation?.title || '企业制度问答';
       const hasMessages = Boolean(conversation?.messages.length); $('welcome').classList.toggle('hidden', hasMessages); $('suggestions').classList.toggle('hidden', hasMessages);
       (conversation?.messages || []).forEach(message => renderMessage(message.role, message.text, message.data || {}));
       $('messages').scrollTop = $('messages').scrollHeight;
@@ -256,77 +204,9 @@
       row.append(avatar, bubble); $('messages').appendChild(row);
     }
     function addMessage(role, text, data = {}, persist = true) { renderMessage(role, text, data); if (persist && state.user) { const conversation = currentConversation(); if (!conversation) return; conversation.messages.push({ role, text, data }); conversation.updatedAt = Date.now(); persistConversations(); renderHistory(); } $('messages').scrollTop = $('messages').scrollHeight; }
-    function setUser(user) { state.user = user; $('userEmail').textContent = user.email; $('userMeta').textContent = `${user.role} · ${user.clearance}`; $('avatar').textContent = initials(user.email); $('clearanceChip').textContent = `${user.clearance} 可见`; $('approvalDescription').textContent = user.role === 'admin' ? '查看全部审批单，并对待处理请求执行批准或拒绝。' : '仅查看你自己提交的审批单及其处理状态。'; }
+    function setUser(user) { state.user = user; $('userEmail').textContent = user.email; $('userMeta').textContent = `${user.role} · ${user.clearance}`; $('avatar').textContent = initials(user.email); $('clearanceChip').textContent = `${user.clearance} 可见`; }
     async function login(email, password) { const res = await fetch('/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) }); if (!res.ok) { let detail = '登录失败'; try { detail = (await res.json()).detail || detail; } catch {} throw new Error(detail); } const data = await res.json(); state.token = data.access_token; sessionStorage.setItem('aegiskb_token', state.token); sessionStorage.setItem('aegiskb_email', email); setVisible(true); await loadUser(email); }
-    async function loadUser() {
-      const response = await fetch('/api/v1/auth/me', { headers: { 'Authorization': `Bearer ${state.token}` } });
-      if (!response.ok) { logout(); throw new Error('登录已过期，请重新登录'); }
-      setUser(await response.json()); loadConversations(); showView('chat'); await loadApprovals(false);
-    }
-    function approvalStatus(status) { return { PENDING: '待处理', APPROVED: '已批准', REJECTED: '已拒绝' }[status] || status; }
-    function approvalAction(action) { return { EXPORT: '导出数据', DELETE: '删除数据', SEND: '对外发送' }[action] || action; }
-    function formatApprovalDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false }); }
-    function updateApprovalSummary() {
-      const pending = state.approvals.filter(item => item.status === 'PENDING').length;
-      $('approvalTotal').textContent = state.approvals.length;
-      $('approvalPending').textContent = pending;
-      $('approvalDecided').textContent = state.approvals.length - pending;
-      $('approvalCount').textContent = pending;
-    }
-    function renderApprovals() {
-      updateApprovalSummary();
-      const rows = $('approvalRows'); rows.replaceChildren();
-      $('approvalTableWrap').classList.toggle('hidden', state.approvals.length === 0);
-      $('approvalEmpty').classList.toggle('hidden', state.approvals.length !== 0);
-      state.approvals.forEach(approval => {
-        const row = document.createElement('tr');
-        const id = document.createElement('td'); id.className = 'approval-id'; id.textContent = `#${approval.id}`;
-        const action = document.createElement('td');
-        const actionName = document.createElement('strong'); actionName.textContent = approvalAction(approval.action); action.appendChild(actionName);
-        if (approval.payload?.message) { const requestText = document.createElement('div'); requestText.style.marginTop = '5px'; requestText.style.color = '#718077'; requestText.textContent = approval.payload.message; action.appendChild(requestText); }
-        const requester = document.createElement('td'); requester.textContent = approval.requester_email;
-        const created = document.createElement('td'); created.textContent = formatApprovalDate(approval.created_at);
-        const statusCell = document.createElement('td');
-        const pill = document.createElement('span'); pill.className = `status-pill status-${approval.status.toLowerCase()}`; pill.textContent = approvalStatus(approval.status); statusCell.appendChild(pill);
-        if (approval.comment) { const comment = document.createElement('div'); comment.style.marginTop = '7px'; comment.textContent = approval.comment; statusCell.appendChild(comment); }
-        const controls = document.createElement('td');
-        if (state.user.role === 'admin' && approval.status === 'PENDING') {
-          const box = document.createElement('div'); box.className = 'decision-box';
-          const input = document.createElement('input'); input.className = 'decision-comment'; input.maxLength = 1000; input.placeholder = '填写审批意见'; input.setAttribute('aria-label', `审批单 ${approval.id} 的审批意见`);
-          const approve = document.createElement('button'); approve.type = 'button'; approve.className = 'decision-button approve'; approve.textContent = '批准';
-          const reject = document.createElement('button'); reject.type = 'button'; reject.className = 'decision-button reject'; reject.textContent = '拒绝';
-          approve.addEventListener('click', () => decideApproval(approval.id, 'APPROVED', input, [approve, reject]));
-          reject.addEventListener('click', () => decideApproval(approval.id, 'REJECTED', input, [approve, reject]));
-          box.append(input, approve, reject); controls.appendChild(box);
-        } else controls.textContent = approval.status === 'PENDING' ? '等待管理员处理' : '已完成';
-        row.append(id, action, requester, created, statusCell, controls); rows.appendChild(row);
-      });
-    }
-    async function loadApprovals(showLoading = true) {
-      if (!state.token) return;
-      if (showLoading) { $('approvalFeedback').className = 'approval-feedback'; $('approvalFeedback').textContent = '正在加载审批列表...'; $('refreshApprovals').disabled = true; }
-      try {
-        const response = await fetch('/api/v1/approvals', { headers: { 'Authorization': `Bearer ${state.token}` } });
-        if (response.status === 401) { logout(); throw new Error('登录已过期，请重新登录'); }
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || '加载审批列表失败');
-        state.approvals = data; renderApprovals();
-        if (showLoading) $('approvalFeedback').textContent = `已更新，共 ${data.length} 条审批记录。`;
-      } catch (error) { $('approvalFeedback').className = 'approval-feedback error'; $('approvalFeedback').textContent = error.message; }
-      finally { $('refreshApprovals').disabled = false; }
-    }
-    async function decideApproval(id, decision, input, buttons) {
-      const comment = input.value.trim();
-      if (comment.length < 2) { $('approvalFeedback').className = 'approval-feedback error'; $('approvalFeedback').textContent = '请填写至少 2 个字符的审批意见。'; input.focus(); return; }
-      buttons.forEach(button => { button.disabled = true; });
-      $('approvalFeedback').className = 'approval-feedback'; $('approvalFeedback').textContent = `正在处理审批单 #${id}...`;
-      try {
-        const response = await fetch(`/api/v1/approvals/${id}/decision`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` }, body: JSON.stringify({ decision, comment }) });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || '审批操作失败');
-        await loadApprovals(false); $('approvalFeedback').textContent = `审批单 #${id} 已${decision === 'APPROVED' ? '批准' : '拒绝'}。`;
-      } catch (error) { $('approvalFeedback').className = 'approval-feedback error'; $('approvalFeedback').textContent = error.message; buttons.forEach(button => { button.disabled = false; }); }
-    }
+    async function loadUser(email) { const role = email.split('@')[0]; const clearance = role === 'employee' ? 'INTERNAL' : 'CONFIDENTIAL'; setUser({ email, role, clearance }); loadConversations(); }
     function openConversationModal(mode, id = null) { state.modalMode = mode; state.editingId = id; const conversation = state.conversations.find(item => item.id === id); $('modalTitle').textContent = mode === 'rename' ? '修改对话名称' : '新建对话'; $('conversationName').value = conversation?.title || ''; $('conversationModal').classList.remove('hidden'); setTimeout(() => { $('conversationName').focus(); $('conversationName').select(); }, 0); }
     function closeConversationModal() { $('conversationModal').classList.add('hidden'); $('conversationName').value = ''; state.editingId = null; }
     function openApiKeyModal() { $('apiKeyInput').value = state.apiKey; $('apiKeyStatus').textContent = ''; $('apiKeyModal').classList.remove('hidden'); setTimeout(() => { $('apiKeyInput').focus(); $('apiKeyInput').select(); }, 0); }
@@ -345,14 +225,14 @@
       finally { $('apiKeyTest').disabled = false; }
     }
     function deleteConversation(id) { const conversation = state.conversations.find(item => item.id === id); if (!conversation || !window.confirm(`确定删除“${conversation.title}”吗？`)) return; state.conversations = state.conversations.filter(item => item.id !== id); if (state.currentId === id) state.currentId = state.conversations[0]?.id || null; persistConversations(); persistCurrent(); renderHistory(); renderMessages(); }
-    async function sendMessage(message) { const text = message.trim(); const conversation = currentConversation(); if (!text || !state.token || !conversation) return; $('welcome').classList.add('hidden'); $('suggestions').classList.add('hidden'); addMessage('user', text); $('messageInput').value = ''; $('messageInput').style.height = 'auto'; $('sendButton').disabled = true; const pending = document.createElement('div'); pending.className = 'message assistant'; pending.id = 'pending'; pending.innerHTML = '<div class="mini-avatar">AI</div><div class="bubble">正在检索授权知识库…</div>'; $('messages').appendChild(pending); $('messages').scrollTop = $('messages').scrollHeight; try { const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` }; if (state.apiKey) headers['X-DASHSCOPE-API-KEY'] = state.apiKey; const res = await fetch('/api/v1/agent/chat', { method: 'POST', headers, body: JSON.stringify({ message: text }) }); if (res.status === 401) { logout(); throw new Error('登录已过期，请重新登录'); } const raw = await res.text(); let data; try { data = JSON.parse(raw); } catch { throw new Error('服务暂时不可用，请稍后重试'); } if (!res.ok) throw new Error(data.detail || '请求失败'); pending.remove(); addMessage('assistant', data.answer, data); if (data.requires_approval) loadApprovals(false); } catch (error) { pending.remove(); addMessage('assistant', `请求未完成：${error.message}`); } finally { $('sendButton').disabled = false; $('messageInput').focus(); } }
-    function logout() { sessionStorage.removeItem('aegiskb_token'); sessionStorage.removeItem('aegiskb_email'); sessionStorage.removeItem('aegiskb_dashscope_key'); state.token = null; state.user = null; state.apiKey = ''; state.conversations = []; state.currentId = null; state.approvals = []; state.view = 'chat'; updateApprovalSummary(); setVisible(false); }
+    async function sendMessage(message) { const text = message.trim(); const conversation = currentConversation(); if (!text || !state.token || !conversation) return; $('welcome').classList.add('hidden'); $('suggestions').classList.add('hidden'); addMessage('user', text); $('messageInput').value = ''; $('messageInput').style.height = 'auto'; $('sendButton').disabled = true; const pending = document.createElement('div'); pending.className = 'message assistant'; pending.id = 'pending'; pending.innerHTML = '<div class="mini-avatar">AI</div><div class="bubble">正在检索授权知识库…</div>'; $('messages').appendChild(pending); $('messages').scrollTop = $('messages').scrollHeight; try { const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` }; if (state.apiKey) headers['X-DASHSCOPE-API-KEY'] = state.apiKey; const res = await fetch('/api/v1/agent/chat', { method: 'POST', headers, body: JSON.stringify({ message: text }) }); if (res.status === 401) { logout(); throw new Error('登录已过期，请重新登录'); } const raw = await res.text(); let data; try { data = JSON.parse(raw); } catch { throw new Error('服务暂时不可用，请稍后重试'); } if (!res.ok) throw new Error(data.detail || '请求失败'); pending.remove(); addMessage('assistant', data.answer, data); } catch (error) { pending.remove(); addMessage('assistant', `请求未完成：${error.message}`); } finally { $('sendButton').disabled = false; $('messageInput').focus(); } }
+    function logout() { sessionStorage.removeItem('aegiskb_token'); sessionStorage.removeItem('aegiskb_email'); sessionStorage.removeItem('aegiskb_dashscope_key'); state.token = null; state.user = null; state.apiKey = ''; state.conversations = []; state.currentId = null; setVisible(false); }
     $('loginForm').addEventListener('submit', async event => { event.preventDefault(); $('loginError').textContent = ''; try { await login($('email').value.trim(), $('password').value); } catch (error) { $('loginError').textContent = error.message; } });
     $('chatForm').addEventListener('submit', event => { event.preventDefault(); sendMessage($('messageInput').value); });
     $('messageInput').addEventListener('input', () => { const input = $('messageInput'); input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 140)}px`; });
     $('messageInput').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); } });
     document.querySelectorAll('.suggestion').forEach(button => button.addEventListener('click', () => sendMessage(button.dataset.question)));
-    $('newChat').addEventListener('click', () => openConversationModal('create')); $('approvalNav').addEventListener('click', () => showView('approvals')); $('refreshApprovals').addEventListener('click', () => loadApprovals()); $('logout').addEventListener('click', logout); $('modalCancel').addEventListener('click', closeConversationModal); $('apiKeySettings').addEventListener('click', openApiKeyModal); $('apiKeyCancel').addEventListener('click', closeApiKeyModal); $('apiKeyTest').addEventListener('click', testApiKey);
+    $('newChat').addEventListener('click', () => openConversationModal('create')); $('logout').addEventListener('click', logout); $('modalCancel').addEventListener('click', closeConversationModal); $('apiKeySettings').addEventListener('click', openApiKeyModal); $('apiKeyCancel').addEventListener('click', closeApiKeyModal); $('apiKeyTest').addEventListener('click', testApiKey);
     $('conversationModal').addEventListener('click', event => { if (event.target === $('conversationModal')) closeConversationModal(); });
     $('apiKeyModal').addEventListener('click', event => { if (event.target === $('apiKeyModal')) closeApiKeyModal(); });
     $('conversationForm').addEventListener('submit', event => { event.preventDefault(); const title = $('conversationName').value.trim(); if (!title) return; if (state.modalMode === 'rename') { const conversation = state.conversations.find(item => item.id === state.editingId); if (conversation) { conversation.title = title; conversation.updatedAt = Date.now(); persistConversations(); renderHistory(); renderMessages(); } } else createConversation(title); closeConversationModal(); });

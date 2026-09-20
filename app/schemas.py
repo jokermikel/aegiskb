@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# 限定密级取值，避免客户端把密级写成任意字符串。
 Sensitivity = Literal["PUBLIC", "INTERNAL", "CONFIDENTIAL"]
 
 
@@ -14,14 +13,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str = 'bearer'
-
-
-class UserOut(BaseModel):
-    email: str
-    role: str
-    department: str
-    clearance: str
+    token_type: str = "bearer"
 
 
 class DocumentCreate(BaseModel):
@@ -32,7 +24,6 @@ class DocumentCreate(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    # 限长阻止超大请求导致成本和延迟失控。
     message: str = Field(min_length=2, max_length=4_000)
 
 
@@ -69,9 +60,11 @@ class ApprovalDecision(BaseModel):
 class ApprovalOut(BaseModel):
     id: int
     action: str
-    payload: dict
     status: str
     requester_id: int
-    requester_email: str
     created_at: datetime
     comment: str | None
+
+
+class RetrievalEvaluationRequest(BaseModel):
+    top_k: int = Field(default=4, ge=1, le=20)
