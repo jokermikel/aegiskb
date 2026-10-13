@@ -1,0 +1,32 @@
+# 统一行尾策略：仓库与工作区一律以 LF 存储。
+#
+# 背景：此前仓库内多个文件行尾混杂（同一文件内 CRLF 与 LF 并存，例如
+# app/agent.py 曾有 128 行 CRLF + 50 行 LF），任何一次改动都会在 diff 里
+# 表现为「整文件重写」，严重干扰代码审查。
+#
+# 配合设置：本仓库已执行 `git config core.autocrlf false`，
+# 行尾完全交给本文件管理，避免 autocrlf 与 attributes 双重转换互相打架。
+* text=auto eol=lf
+
+# 二进制文件不参与换行符转换
+*.db binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.hprof binary
+
+# 明确按文本处理（eol 继承上面的 eol=lf）
+*.py text
+*.md text
+*.jsonl text
+*.html text
+*.css text
+*.js text
+*.yml text
+*.yaml text
+*.txt text
