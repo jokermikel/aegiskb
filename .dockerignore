@@ -1,0 +1,43 @@
+# 构建镜像时排除的内容。
+# 缺少本文件时 `COPY . .` 会把下列内容全部打进镜像层：
+#   .env        内含真实 DASHSCOPE_API_KEY，会永久留在镜像历史里
+#   .venv       本地虚拟环境（约 80 MB），镜像白白变胖
+#   *.db        本地演示数据库
+#   .git/.idea  版本与 IDE 元数据
+# 这些内容都应该由运行环境注入，而不是固化在镜像中。
+
+# 密钥与本地配置
+.env
+.env.*
+!.env.example
+
+# 虚拟环境与依赖缓存
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 本地数据库与备份
+*.db
+*.sqlite3
+
+# 版本控制与 IDE
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+
+# 文档与协作文件
+*.md
+!README.md
+改进.md
+
+# 其他
+*.log
+*.bak
+Dockerfile
+docker-compose.yml

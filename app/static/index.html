@@ -113,6 +113,11 @@
     .decision-button:disabled,.refresh-approvals:disabled { opacity:.5; cursor:not-allowed; }
     .approval-empty { border:1px dashed #cedbd3; border-radius:8px; padding:46px 20px; text-align:center; color:var(--muted); background:#fbfcfb; }
     .approval-empty strong { display:block; margin-bottom:6px; color:#43564b; font-size:14px; }
+    .approval-pager { display:flex; align-items:center; justify-content:center; gap:12px; padding:2px 0 4px; }
+    .page-button { border:1px solid #d7e4dc; background:#fff; color:#486054; border-radius:8px; padding:8px 14px; font-size:12px; }
+    .page-button:hover:not(:disabled) { border-color:#9fc8ae; color:var(--accent-dark); }
+    .page-button:disabled { opacity:.5; cursor:not-allowed; }
+    .page-info { color:var(--muted); font-size:12px; }
     .login-screen { position:fixed; inset:0; display:grid; place-items:center; padding:20px; background:#f3f7f3; z-index:10; }
     .login-card { width:min(430px,100%); background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:35px; }
     .login-card .brand { padding:0; margin-bottom:28px; }
@@ -124,7 +129,7 @@
     .field input:focus { border-color:#8dc5a3; box-shadow:0 0 0 3px #e6f4eb; }
     .login-submit { width:100%; border:0; border-radius:9px; padding:12px; background:var(--accent); color:#fff; font-weight:700; margin-top:6px; }
     .login-error { min-height:18px; color:#b74c3c; font-size:12px; margin-top:10px; }
-    .demo-hint { border-top:1px solid var(--line); margin-top:21px; padding-top:16px; color:#829087; font-size:11px; line-height:1.7; }
+      <div class="demo-hint">演示账号：employee / finance / admin 等 10 个<br>密码均为：demo-password</div>
     .modal-backdrop { position:fixed; inset:0; z-index:20; display:grid; place-items:center; padding:20px; background:rgba(19,48,36,.35); backdrop-filter:blur(3px); }
     .modal { width:min(390px,100%); background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:24px; }
     .modal h3 { margin:0 0 7px; font-size:18px; }
@@ -178,6 +183,7 @@
         <div id="approvalFeedback" class="approval-feedback" aria-live="polite"></div>
         <div id="approvalTableWrap" class="approval-table-wrap hidden"><table class="approval-table"><thead><tr><th>编号</th><th>请求内容</th><th>提交人</th><th>提交时间</th><th>状态 / 意见</th><th>审批操作</th></tr></thead><tbody id="approvalRows"></tbody></table></div>
         <div id="approvalEmpty" class="approval-empty hidden"><strong>暂无审批单</strong><span>高风险导出、删除或发送请求会在这里生成审批记录。</span></div>
+        <div id="approvalPager" class="approval-pager hidden"><button id="approvalPrev" class="page-button" type="button">上一页</button><span id="approvalPageInfo" class="page-info"></span><button id="approvalNext" class="page-button" type="button">下一页</button></div>
       </section>
     </main>
   </div>
@@ -199,7 +205,7 @@
     </form>
   </div>
   <script>
-    const state = { token: sessionStorage.getItem('aegiskb_token'), user: null, apiKey: sessionStorage.getItem('aegiskb_dashscope_key') || '', conversations: [], currentId: null, approvals: [], view: 'chat', modalMode: 'create', editingId: null };
+    const state = { token: sessionStorage.getItem('aegiskb_token'), user: null, apiKey: sessionStorage.getItem('aegiskb_dashscope_key') || '', conversations: [], currentId: null, approvals: [], approvalTotal: 0, approvalPendingTotal: 0, approvalPage: 1, approvalPageSize: 10, view: 'chat', modalMode: 'create', editingId: null };
     const $ = (id) => document.getElementById(id);
     const conversationKey = () => `aegiskb_conversations_${state.user.email}`;
     const currentKey = () => `aegiskb_current_${state.user.email}`;
@@ -261,20 +267,30 @@
     async function loadUser() {
       const response = await fetch('/api/v1/auth/me', { headers: { 'Authorization': `Bearer ${state.token}` } });
       if (!response.ok) { logout(); throw new Error('登录已过期，请重新登录'); }
-      setUser(await response.json()); loadConversations(); showView('chat'); await loadApprovals(false);
+      setUser(await response.json()); state.approvalPage = 1; loadConversations(); showView('chat'); await loadApprovals(false);
     }
     function approvalStatus(status) { return { PENDING: '待处理', APPROVED: '已批准', REJECTED: '已拒绝' }[status] || status; }
     function approvalAction(action) { return { EXPORT: '导出数据', DELETE: '删除数据', SEND: '对外发送' }[action] || action; }
     function formatApprovalDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false }); }
     function updateApprovalSummary() {
-      const pending = state.approvals.filter(item => item.status === 'PENDING').length;
-      $('approvalTotal').textContent = state.approvals.length;
+      // 统计口径来自响应头，跨页仍然准确；未加载时回退为本页统计。
+      const total = state.approvalTotal || state.approvals.length;
+      const pending = state.approvalTotal ? state.approvalPendingTotal : state.approvals.filter(item => item.status === 'PENDING').length;
+      $('approvalTotal').textContent = total;
       $('approvalPending').textContent = pending;
-      $('approvalDecided').textContent = state.approvals.length - pending;
+      $('approvalDecided').textContent = Math.max(0, total - pending);
       $('approvalCount').textContent = pending;
+    }
+    function renderApprovalPager() {
+      const pages = Math.max(1, Math.ceil(state.approvalTotal / state.approvalPageSize));
+      $('approvalPager').classList.toggle('hidden', state.approvalTotal === 0);
+      $('approvalPageInfo').textContent = `第 ${state.approvalPage} / ${pages} 页`;
+      $('approvalPrev').disabled = state.approvalPage <= 1;
+      $('approvalNext').disabled = state.approvalPage >= pages;
     }
     function renderApprovals() {
       updateApprovalSummary();
+      renderApprovalPager();
       const rows = $('approvalRows'); rows.replaceChildren();
       $('approvalTableWrap').classList.toggle('hidden', state.approvals.length === 0);
       $('approvalEmpty').classList.toggle('hidden', state.approvals.length !== 0);
@@ -302,16 +318,23 @@
         row.append(id, action, requester, created, statusCell, controls); rows.appendChild(row);
       });
     }
-    async function loadApprovals(showLoading = true) {
+    async function loadApprovals(showLoading = true, page = state.approvalPage) {
       if (!state.token) return;
+      state.approvalPage = Math.max(1, page);
       if (showLoading) { $('approvalFeedback').className = 'approval-feedback'; $('approvalFeedback').textContent = '正在加载审批列表...'; $('refreshApprovals').disabled = true; }
       try {
-        const response = await fetch('/api/v1/approvals', { headers: { 'Authorization': `Bearer ${state.token}` } });
+        const query = new URLSearchParams({ page: String(state.approvalPage), page_size: String(state.approvalPageSize) });
+        const response = await fetch(`/api/v1/approvals?${query}`, { headers: { 'Authorization': `Bearer ${state.token}` } });
         if (response.status === 401) { logout(); throw new Error('登录已过期，请重新登录'); }
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || '加载审批列表失败');
-        state.approvals = data; renderApprovals();
-        if (showLoading) $('approvalFeedback').textContent = `已更新，共 ${data.length} 条审批记录。`;
+        state.approvals = data;
+        state.approvalTotal = Number(response.headers.get('X-Total-Count') ?? data.length);
+        state.approvalPendingTotal = Number(response.headers.get('X-Total-Pending') ?? 0);
+        // 例如最后一页被清空时，自动回退到上一页。
+        if (!data.length && state.approvalPage > 1) return loadApprovals(showLoading, state.approvalPage - 1);
+        renderApprovals();
+        if (showLoading) $('approvalFeedback').textContent = `已更新，第 ${state.approvalPage} 页，共 ${state.approvalTotal} 条审批记录。`;
       } catch (error) { $('approvalFeedback').className = 'approval-feedback error'; $('approvalFeedback').textContent = error.message; }
       finally { $('refreshApprovals').disabled = false; }
     }
@@ -346,13 +369,21 @@
     }
     function deleteConversation(id) { const conversation = state.conversations.find(item => item.id === id); if (!conversation || !window.confirm(`确定删除“${conversation.title}”吗？`)) return; state.conversations = state.conversations.filter(item => item.id !== id); if (state.currentId === id) state.currentId = state.conversations[0]?.id || null; persistConversations(); persistCurrent(); renderHistory(); renderMessages(); }
     async function sendMessage(message) { const text = message.trim(); const conversation = currentConversation(); if (!text || !state.token || !conversation) return; $('welcome').classList.add('hidden'); $('suggestions').classList.add('hidden'); addMessage('user', text); $('messageInput').value = ''; $('messageInput').style.height = 'auto'; $('sendButton').disabled = true; const pending = document.createElement('div'); pending.className = 'message assistant'; pending.id = 'pending'; pending.innerHTML = '<div class="mini-avatar">AI</div><div class="bubble">正在检索授权知识库…</div>'; $('messages').appendChild(pending); $('messages').scrollTop = $('messages').scrollHeight; try { const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` }; if (state.apiKey) headers['X-DASHSCOPE-API-KEY'] = state.apiKey; const res = await fetch('/api/v1/agent/chat', { method: 'POST', headers, body: JSON.stringify({ message: text }) }); if (res.status === 401) { logout(); throw new Error('登录已过期，请重新登录'); } const raw = await res.text(); let data; try { data = JSON.parse(raw); } catch { throw new Error('服务暂时不可用，请稍后重试'); } if (!res.ok) throw new Error(data.detail || '请求失败'); pending.remove(); addMessage('assistant', data.answer, data); if (data.requires_approval) loadApprovals(false); } catch (error) { pending.remove(); addMessage('assistant', `请求未完成：${error.message}`); } finally { $('sendButton').disabled = false; $('messageInput').focus(); } }
-    function logout() { sessionStorage.removeItem('aegiskb_token'); sessionStorage.removeItem('aegiskb_email'); sessionStorage.removeItem('aegiskb_dashscope_key'); state.token = null; state.user = null; state.apiKey = ''; state.conversations = []; state.currentId = null; state.approvals = []; state.view = 'chat'; updateApprovalSummary(); setVisible(false); }
+    function logout() {
+      // 对话内容属于权限范围内的数据，共用设备上退出登录必须清掉本地缓存，
+      // 否则下一个登录者能在 localStorage 里读到上一个人的制度问答记录。
+      if (state.user) { localStorage.removeItem(conversationKey()); localStorage.removeItem(currentKey()); }
+      sessionStorage.removeItem('aegiskb_token'); sessionStorage.removeItem('aegiskb_email'); sessionStorage.removeItem('aegiskb_dashscope_key');
+      state.token = null; state.user = null; state.apiKey = ''; state.conversations = []; state.currentId = null;
+      state.approvals = []; state.approvalTotal = 0; state.approvalPendingTotal = 0; state.approvalPage = 1; state.view = 'chat';
+      updateApprovalSummary(); setVisible(false);
+    }
     $('loginForm').addEventListener('submit', async event => { event.preventDefault(); $('loginError').textContent = ''; try { await login($('email').value.trim(), $('password').value); } catch (error) { $('loginError').textContent = error.message; } });
     $('chatForm').addEventListener('submit', event => { event.preventDefault(); sendMessage($('messageInput').value); });
     $('messageInput').addEventListener('input', () => { const input = $('messageInput'); input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 140)}px`; });
     $('messageInput').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); } });
     document.querySelectorAll('.suggestion').forEach(button => button.addEventListener('click', () => sendMessage(button.dataset.question)));
-    $('newChat').addEventListener('click', () => openConversationModal('create')); $('approvalNav').addEventListener('click', () => showView('approvals')); $('refreshApprovals').addEventListener('click', () => loadApprovals()); $('logout').addEventListener('click', logout); $('modalCancel').addEventListener('click', closeConversationModal); $('apiKeySettings').addEventListener('click', openApiKeyModal); $('apiKeyCancel').addEventListener('click', closeApiKeyModal); $('apiKeyTest').addEventListener('click', testApiKey);
+    $('newChat').addEventListener('click', () => openConversationModal('create')); $('approvalNav').addEventListener('click', () => showView('approvals')); $('refreshApprovals').addEventListener('click', () => loadApprovals()); $('approvalPrev').addEventListener('click', () => loadApprovals(true, state.approvalPage - 1)); $('approvalNext').addEventListener('click', () => loadApprovals(true, state.approvalPage + 1)); $('logout').addEventListener('click', logout); $('modalCancel').addEventListener('click', closeConversationModal); $('apiKeySettings').addEventListener('click', openApiKeyModal); $('apiKeyCancel').addEventListener('click', closeApiKeyModal); $('apiKeyTest').addEventListener('click', testApiKey);
     $('conversationModal').addEventListener('click', event => { if (event.target === $('conversationModal')) closeConversationModal(); });
     $('apiKeyModal').addEventListener('click', event => { if (event.target === $('apiKeyModal')) closeApiKeyModal(); });
     $('conversationForm').addEventListener('submit', event => { event.preventDefault(); const title = $('conversationName').value.trim(); if (!title) return; if (state.modalMode === 'rename') { const conversation = state.conversations.find(item => item.id === state.editingId); if (conversation) { conversation.title = title; conversation.updatedAt = Date.now(); persistConversations(); renderHistory(); renderMessages(); } } else createConversation(title); closeConversationModal(); });

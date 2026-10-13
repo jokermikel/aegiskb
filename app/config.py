@@ -12,8 +12,10 @@ class Settings(BaseSettings):
     dashscope_api_key: str | None = None
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     qwen_model: str = "qwen3.8-max"
-    qwen_reasoning_effort:Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] = "none"
+    qwen_reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] = "none"
     app_env: str = "development"
+    # 是否允许启动时自动建表。生产环境应设为 false，改用 Alembic 迁移管理结构。
+    auto_create_schema: bool = True
 
     # 告诉 Pydantic 从项目根目录的 .env 读取变量；多余变量忽略。
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

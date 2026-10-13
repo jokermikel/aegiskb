@@ -1,13 +1,14 @@
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session
 
 from .agent import risk_action, run_agent, test_qwen_connection
@@ -15,8 +16,16 @@ from .config import get_settings
 from .db import ApprovalRequest, AuditLog, Base, Chunk, Document, User, engine, get_db
 from .schemas import ApiKeyTestRequest, ApiKeyTestResponse, ApprovalOut, ApprovalDecision, ChatRequest, ChatResponse, DocumentCreate, LoginRequest, TokenResponse, UserOut
 from .security import create_access_token, decode_access_token, hash_password, verify_password
+from .seed_data import DEMO_DOCUMENTS, DEMO_PASSWORD, DEMO_USERS, build_approval_samples
 
-app = FastAPI(title="Aegiskb Enterprise AI Agent", version="1.0.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """服务启动时准备数据库：按配置建表、检查结构漂移、灌入演示数据。"""
+    prepare_database()
+    yield
+
+
+app = FastAPI(title="Aegiskb Enterprise AI Agent", version="1.0.0", lifespan=lifespan)
 bearer = HTTPBearer()  # OpenAPI/Swagger 由它生成 Bearer 认证框。
 Db = Annotated[Session, Depends(get_db)]
 STATIC_DIR = Path(__file__).parent / "static"
@@ -53,33 +62,81 @@ def require_roles(*roles: str):
 
 
 def seed_demo_data(db: Session) -> None:
-    """仅空数据库时创建三位演示用户和三篇演示文档，防止每次启动重复插入。"""
+    """仅空数据库时导入演示数据：10 个账号、50 篇制度文档、100 条审批单。
+
+    数据本身维护在 app/seed_data.py，这里只负责落库，防止每次启动重复插入。
+    """
     if db.scalar(select(User.id).limit(1)):
         return
     users = [
-        User(email="employee@example.com", password_hash=hash_password("demo-password"), role="employee", department="engineering", clearance="INTERNAL"),
-        User(email="finance@example.com", password_hash=hash_password("demo-password"), role="finance", department="finance", clearance="CONFIDENTIAL"),
-        User(email="admin@example.com", password_hash=hash_password("demo-password"), role="admin", department="security", clearance="CONFIDENTIAL"),
+        User(
+            email=email,
+            password_hash=hash_password(DEMO_PASSWORD),
+            role=role,
+            department=department,
+            clearance=clearance,
+        )
+        for email, role, department, clearance in DEMO_USERS
     ]
     db.add_all(users)
-    db.flush()  # 获取 users[2].id，供文档 created_by 外键使用。
-    docs = [
-        ("远程办公制度", "all", "INTERNAL", "员工每周可远程办公两天。跨城市长期办公需直属经理批准，并在 HR 系统登记。"),
-        ("2026 差旅报销制度", "finance", "CONFIDENTIAL", "国内出差住宿标准：一线城市每晚不超过 800 元，其他城市每晚不超过 500 元。报销须在行程结束后 30 天内提交发票和审批单。"),
-        ("数据分级与客户信息规范", "all", "INTERNAL", "客户联系人和合同属于内部数据。批量导出、跨系统发送、删除数据均为高风险操作，必须经过管理员审批并保留审计记录。"),
-    ]
-    for title, department, sensitivity, body in docs:
-        document = Document(title=title, department=department, sensitivity=sensitivity, body=body, created_by=users[2].id)
+    db.flush()  # 先取到用户主键，供文档和审批单的外键使用。
+    users_by_email = {user.email: user for user in users}
+    admin = users_by_email["admin@example.com"]
+
+    for title, department, sensitivity, body in DEMO_DOCUMENTS:
+        document = Document(title=title, department=department, sensitivity=sensitivity, body=body, created_by=admin.id)
         db.add(document)
         db.flush()
         db.add_all([Chunk(document_id=document.id, ordinal=i, content=chunk) for i, chunk in enumerate(make_chunks(body))])
+
+    # 高风险操作的审批单样例。已裁决的记录挂管理员作为审批人，并补上意见与裁决时间。
+    for sample in build_approval_samples([user.email for user in users]):
+        decided = sample["status"] != "PENDING"
+        db.add(
+            ApprovalRequest(
+                requester_id=users_by_email[sample["requester_email"]].id,
+                action=sample["action"],
+                payload={"message": sample["message"]},
+                status=sample["status"],
+                reviewer_id=admin.id if decided else None,
+                comment=sample["comment"],
+                created_at=sample["created_at"],
+                decided_at=sample["decided_at"],
+            )
+        )
     db.commit()
 
 
-@app.on_event("startup")
-def startup() -> None:
-    # 教学原型直接建表；生产环境应使用 Alembic 数据库迁移。
-    Base.metadata.create_all(bind=engine)
+def detect_schema_drift() -> list[str]:
+    """比对模型定义与数据库实际结构，返回差异描述（空列表表示一致）。"""
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    problems: list[str] = []
+    for table_name, table in Base.metadata.tables.items():
+        if table_name not in existing_tables:
+            problems.append(f"缺少表 {table_name}")
+            continue
+        actual_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        for missing in sorted({column.name for column in table.columns} - actual_columns):
+            problems.append(f"{table_name} 缺少字段 {missing}")
+    return problems
+
+
+def prepare_database() -> None:
+    """准备数据库：按需建表、检查结构漂移、灌入演示数据。
+
+    开发与演示环境允许自动建表（AUTO_CREATE_SCHEMA，默认开启）；
+    建表后始终检查结构漂移 —— 若模型已改而库未迁移，直接抛错并提示
+    `alembic upgrade head`，避免出现「改了模型却静默不生效」。
+    """
+    if get_settings().auto_create_schema:
+        Base.metadata.create_all(bind=engine)
+    problems = detect_schema_drift()
+    if problems:
+        raise RuntimeError(
+            "数据库结构与模型定义不一致，请执行 `alembic upgrade head` 完成迁移，"
+            "或删除数据库后重新初始化：\n  - " + "\n  - ".join(problems)
+        )
     with Session(bind=engine) as db:
         seed_demo_data(db)
 
@@ -144,12 +201,28 @@ def test_qwen_api_key(payload: ApiKeyTestRequest, _: Annotated[User, Depends(cur
 
 
 @app.get("/api/v1/approvals", response_model=list[ApprovalOut])
-def list_approvals(db: Db, user: Annotated[User, Depends(current_user)]) -> list[ApprovalRequest]:
-    query = select(ApprovalRequest).order_by(ApprovalRequest.created_at.desc())
+def list_approvals(
+    db: Db,
+    user: Annotated[User, Depends(current_user)],
+    response: Response,
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+) -> list[ApprovalRequest]:
+    """分页返回审批单；总数与分页信息通过响应头回传。"""
+    query = select(ApprovalRequest).order_by(ApprovalRequest.created_at.desc(), ApprovalRequest.id.desc())
+    total_query = select(func.count(ApprovalRequest.id))
+    pending_query = total_query.where(ApprovalRequest.status == "PENDING")
     # 普通用户只能看自己发起的审批；admin 才能看全量。
     if user.role != "admin":
         query = query.where(ApprovalRequest.requester_id == user.id)
-    return list(db.scalars(query))
+        total_query = total_query.where(ApprovalRequest.requester_id == user.id)
+        pending_query = pending_query.where(ApprovalRequest.requester_id == user.id)
+    # 总数放在响应头，避免改变既有数组响应结构。
+    response.headers["X-Total-Count"] = str(db.scalar(total_query) or 0)
+    response.headers["X-Total-Pending"] = str(db.scalar(pending_query) or 0)
+    response.headers["X-Page"] = str(page)
+    response.headers["X-Page-Size"] = str(page_size)
+    return list(db.scalars(query.offset((page - 1) * page_size).limit(page_size)))
 
 
 @app.post("/api/v1/approvals/{approval_id}/decision", response_model=ApprovalOut)
@@ -168,6 +241,8 @@ def decide_approval(approval_id: int, payload: ApprovalDecision, db: Db, user: A
 
 
 @app.get("/api/v1/audit-logs")
-def audit_logs(db: Db, _: Annotated[User, Depends(require_roles("admin"))], limit: int = 50) -> list[dict]:
-    rows = db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(min(limit, 200))).all()
+def audit_logs(db: Db, _: Annotated[User, Depends(require_roles("admin"))], limit: int = Query(50, ge=1, le=200)) -> list[dict]:
+    # 用 Query(ge=1, le=200) 夹紧取值：负数会让 SQLite 的 LIMIT -1 变成不限行数，
+    # 从而绕过 200 条上限，这里直接在参数校验层拒绝越界取值。
+    rows = db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
     return [{"id": row.id, "request_id": row.request_id, "actor_id": row.actor_id, "event": row.event, "metadata": row.metadata_json, "created_at": row.created_at} for row in rows]
