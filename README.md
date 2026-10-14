@@ -132,6 +132,8 @@ ruff check .        # 代码检查
 pytest -q           # 单元与安全行为测试
 ```
 
+`pyproject.toml` 里显式声明了 `pythonpath = ["."]`。这不是可选项：`pytest` 控制台脚本**不会**把当前目录加进 `sys.path`（只有 `python -m pytest` 会），而 `tests/` 下没有 `__init__.py`，pytest 只会把 `tests/` 加进去 —— 于是 `import app` 会直接 `ModuleNotFoundError`，表现为「本地用 `python -m pytest` 全绿、流水线上连收集都失败」。显式声明后两种调用方式都能正常工作。
+
 测试使用独立数据库、清空 API Key，并强制离线向量后端，覆盖授权边界、审批流转、审批前置语义、入库校验、分块边界、分页与筛选、登录限流、迁移一致性、评测集覆盖率与 `data/evals.jsonl` 评测样例，共 40 个用例。`tests/conftest.py` 会在每次会话开始时把测试库清零，避免残留数据造成莫名失败。
 
 `.github/workflows/ci.yml` 会在每次推送时依次跑 ruff、`alembic upgrade head && alembic check`、pytest 与评测质量闸门。

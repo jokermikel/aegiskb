@@ -9,6 +9,11 @@ dependencies = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# 必须显式声明项目根目录：`pytest` 控制台脚本不会把当前目录加进 sys.path
+# （只有 `python -m pytest` 会），而 tests/ 下没有 __init__.py，
+# 于是 pytest 只会把 tests/ 加进去，导致 `import app` 直接 ModuleNotFoundError。
+# CI 用的正是控制台脚本，所以同一套测试在本地过、在流水线上连收集都失败。
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 140
