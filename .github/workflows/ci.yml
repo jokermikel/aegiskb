@@ -7,6 +7,15 @@ on:
 
 jobs:
   check:
+    # 跑两个版本：3.11 与 Dockerfile 一致（部署口径），3.13 贴近开发机的新版本。
+    # 单一版本时一旦失败很难判断「是代码问题还是某个解释器版本的问题」，
+    # 矩阵能让失败直接归因到具体版本。
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    name: check (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     env:
       # CI 必须完全离线：清空密钥，强制使用离线向量后端，保证结果可复现。
@@ -20,7 +29,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: 安装依赖
