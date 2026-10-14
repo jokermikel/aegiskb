@@ -55,14 +55,8 @@ jobs:
           if [ "$status" -ne 0 ]; then
             # 把失败用例发成注解：公开仓库下无需登录即可通过 Checks API 读到，
             # 而完整 job 日志的下载接口需要仓库管理员权限，排查时很被动。
-            python - <<'PY'
-            import pathlib
-
-            text = pathlib.Path("pytest-output.log").read_text(encoding="utf-8", errors="replace")
-            lines = [line.strip() for line in text.splitlines() if line.startswith(("FAILED", "ERROR"))]
-            detail = " ; ".join(lines[:10]) or "pytest 失败，但未解析到 FAILED 行"
-            print(f"::error::{detail[:900]}")
-            PY
+            detail=$(grep -E '^(FAILED|ERROR)' pytest-output.log | head -10 | paste -sd ';' -)
+            echo "::error::${detail:-pytest 失败，但未解析到 FAILED 行}"
           fi
           exit "$status"
 
