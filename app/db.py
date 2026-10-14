@@ -49,7 +49,10 @@ class Document(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text)
-    department: Mapped[str] = mapped_column(String(64), default="all")
+    # 支持逗号分隔的多部门与子树通配（如 "engineering,it"、"engineering/*"），
+    # 8 个部门全用子树写法就已经 66 字符：SQLite 不校验长度，但 PostgreSQL 会拒绝，
+    # 因此这里留足余量而不是沿用 64。
+    department: Mapped[str] = mapped_column(String(255), default="all")
     sensitivity: Mapped[str] = mapped_column(String(32), default="INTERNAL")
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -67,10 +70,6 @@ class Chunk(Base):
     embedding: Mapped["ChunkEmbedding | None"] = relationship(
         cascade="all, delete-orphan", passive_deletes=True, uselist=False
     )
-
-    @property
-    def embedding_chunk_id(self) -> int:
-        return self.id
 
 
 class ChunkEmbedding(Base):

@@ -59,16 +59,6 @@ def audit(db: Session, request_id: str, actor_id: int | None, event: str, /, **m
     db.commit()
 
 
-def make_chunks(text: str, size: int = 350, overlap: int = 60) -> list[str]:
-    """兼容旧调用名的分块入口，实现见 app/chunking.py 的 chunk_text。
-
-    旧实现用固定窗口硬切：overlap >= size 时要么静默返回空列表（整段内容丢失），
-    要么直接抛 "range() arg 3 must not be zero"。chunk_text 按句子边界打包并
-    夹紧 overlap 取值，因此这里只做转发。
-    """
-    return chunk_text(text, size=size, overlap=overlap)
-
-
 def current_user(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)], db: Db) -> User:
     """所有需登录接口的统一身份入口。"""
     user = db.get(User, decode_access_token(credentials.credentials))
@@ -135,7 +125,7 @@ def seed_demo_data(db: Session) -> None:
         document = Document(title=title, department=department, sensitivity=sensitivity, body=body, created_by=admin.id)
         db.add(document)
         db.flush()
-        db.add_all([Chunk(document_id=document.id, ordinal=i, content=chunk) for i, chunk in enumerate(make_chunks(body))])
+        db.add_all([Chunk(document_id=document.id, ordinal=i, content=chunk) for i, chunk in enumerate(chunk_text(body))])
 
     # 高风险操作的审批单样例。已裁决的记录挂管理员作为审批人，并补上意见与裁决时间。
     for sample in build_approval_samples([user.email for user in users]):

@@ -397,7 +397,7 @@ def test_multi_department_document_visible_to_each_listed_department():
     """多部门文档应被每个列出的部门检索到，且不被未列出的部门检索到。"""
     from app.agent import search_knowledge
     from app.db import Chunk, Document, SessionLocal, User
-    from app.main import make_chunks
+    from app.retrieval import chunk_text
 
     db = SessionLocal()
     try:
@@ -415,7 +415,7 @@ def test_multi_department_document_visible_to_each_listed_department():
         # 检索走的是 Chunk JOIN Document，没有切片的文档检索不到。
         db.add_all(
             Chunk(document_id=document.id, ordinal=index, content=chunk)
-            for index, chunk in enumerate(make_chunks(body))
+            for index, chunk in enumerate(chunk_text(body))
         )
         db.commit()
         try:
@@ -694,6 +694,38 @@ def test_approval_list_supports_status_and_keyword_filters():
 
     # 非法状态值应被参数校验拒绝。
     assert client.get("/api/v1/approvals", params={"status": "UNKNOWN"}, headers=auth(admin)).status_code == 422
+
+
+def test_documents_endpoint_accepts_full_multi_department_list():
+    """全部部门都用子树写法时长度为 66 字符，必须能正常入库。
+
+    原先 department 列是 VARCHAR(64)：SQLite 不校验长度所以测试发现不了，
+    但 PostgreSQL 会直接拒绝，属于只在生产才暴露的跨方言缺陷。
+    """
+    from app.db import Document, SessionLocal
+    from app.departments import KNOWN_DEPARTMENTS
+
+    department = ",".join(f"{name}/*" for name in KNOWN_DEPARTMENTS)
+    assert len(department) > 64, "本用例的前提是长度确实超过原来的列宽"
+
+    finance = login("finance@example.com")
+    payload = {
+        "title": "全部门通配文档",
+        "body": "本条用于验证部门选择器的长度上限，正文长度需要满足最小要求。",
+        "department": department,
+        "sensitivity": "INTERNAL",
+    }
+    response = client.post("/api/v1/documents", json=payload, headers=auth(finance))
+    assert response.status_code == 201, response.text
+
+    with SessionLocal() as db:
+        document = db.get(Document, response.json()["id"])
+        assert document is not None
+        try:
+            assert document.department == department
+        finally:
+            db.delete(document)
+            db.commit()
 
 
 def test_login_is_rate_limited_after_repeated_failures():
