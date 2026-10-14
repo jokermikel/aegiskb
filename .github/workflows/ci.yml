@@ -50,13 +50,17 @@ jobs:
       - name: 单元测试
         run: |
           set +e
-          pytest -q -rf --tb=short 2>&1 | tee pytest-output.log
+          pytest -q -rEf --tb=short 2>&1 | tee pytest-output.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             # 把失败用例发成注解：公开仓库下无需登录即可通过 Checks API 读到，
             # 而完整 job 日志的下载接口需要仓库管理员权限，排查时很被动。
-            detail=$(grep -E '^(FAILED|ERROR)' pytest-output.log | head -10 | paste -sd ';' -)
-            echo "::error::${detail:-pytest 失败，但未解析到 FAILED 行}"
+            # 必须同时收 ERROR：退出码 2 表示收集阶段出错，而 -rf 不会显示它。
+            detail=$(grep -E '^(FAILED|ERROR)' pytest-output.log | head -6 | paste -sd '|' -)
+            if [ -z "$detail" ]; then
+              detail=$(tail -12 pytest-output.log | paste -sd '|' -)
+            fi
+            echo "::error::exit=${status} ${detail}"
           fi
           exit "$status"
 
