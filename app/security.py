@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import HTTPException, status
@@ -30,7 +30,7 @@ def verify_password(password: str,password_hash: str) -> bool:
 
 def create_access_token(user_id: int) -> str:
     """生成 8 小时有效期的 JWT；sub 是用户主键，不把权限直接信任在 token 中。"""
-    payload = {"sub": str(user_id), "exp": datetime.now(timezone.utc) + timedelta(hours=8)}
+    payload = {"sub": str(user_id), "exp": datetime.now(UTC) + timedelta(hours=8)}
     return jwt.encode(payload, get_settings().jwt_secret, algorithm="HS256")
 
 

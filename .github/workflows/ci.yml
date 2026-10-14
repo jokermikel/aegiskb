@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # CI 必须完全离线：清空密钥，强制使用离线向量后端，保证结果可复现。
+      DASHSCOPE_API_KEY: ""
+      EMBEDDING_PROVIDER: offline
+      JWT_SECRET: ci-secret
+      DATABASE_URL: sqlite:///./test_aegiskb.db
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 代码检查（ruff）
+        run: ruff check .
+
+      - name: 数据库迁移可执行且与模型一致
+        env:
+          DATABASE_URL: sqlite:///./ci_autogen.db
+        run: |
+          alembic upgrade head
+          alembic check
+
+      - name: 单元测试
+        run: pytest -q
+
+      - name: 离线检索评测质量闸门
+        run: python scripts/run_eval.py --top-k 4

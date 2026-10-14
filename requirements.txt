@@ -7,6 +7,10 @@ sqlalchemy==2.0.43
 alembic==1.20.0
 pydantic-settings==2.10.1
 
+# 向量检索：numpy 是离线后端与向量编解码的硬依赖，faiss-cpu 为可选加速后端
+numpy==2.3.3
+faiss-cpu==1.12.0
+
 # JWT、百炼兼容客户端、PostgreSQL 驱动
 PyJWT==2.10.1
 openai==1.109.1
@@ -15,3 +19,6 @@ psycopg[binary]==3.2.10
 # 测试
 pytest==8.4.2
 httpx==0.28.1
+
+# 代码检查（CI 与本地开发使用）
+ruff==0.17.0

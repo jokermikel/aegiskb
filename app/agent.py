@@ -1,23 +1,38 @@
-"""Agent loop: authorization-safe retrieval tool + optional Qwen Responses API."""
+"""Agent loop: authorization-safe retrieval tool + optional Qwen Responses API.
+
+检索本身由 app/retrieval.py 提供（混合召回 + 授权裁剪），本模块只负责
+「高风险意图判定」与「模型工具调用循环」两件事。
+"""
 import json
-import re
-from dataclasses import dataclass
 
 from openai import OpenAI, OpenAIError
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .db import Chunk, Document, User
+from .db import User
+from .retrieval import (
+    RANK,
+    RetrievalMetrics,
+    SearchHit,
+    department_visible,
+    parse_departments,
+    search_knowledge,
+)
 
-# 密级只能向下访问：CONFIDENTIAL 可以读三类，INTERNAL 不能读 CONFIDENTIAL。
-RANK = {"PUBLIC": 0, "INTERNAL": 1, "CONFIDENTIAL": 2}
-
-# 按 clearance 反查可访问的密级集合，供 SQL 侧把密级过滤直接下推。
-CLEARANCE_SENSITIVITIES = {
-    level: tuple(name for name, value in RANK.items() if value <= rank)
-    for level, rank in RANK.items()
-}
+__all__ = [
+    "RANK",
+    "RetrievalMetrics",
+    "SearchHit",
+    "citations_from_hits",
+    "department_visible",
+    "local_answer",
+    "parse_departments",
+    "qwen_request_options",
+    "risk_action",
+    "run_agent",
+    "search_knowledge",
+    "test_qwen_connection",
+]
 
 # 这是“审批前置”规则。它不执行操作，只创建审批单。
 RISKY_PATTERNS = {
@@ -43,14 +58,6 @@ DIRECTIVE_MARKERS = (
 )
 
 
-@dataclass
-class SearchHit:
-    document_id: int
-    title: str
-    excerpt: str
-    score: int
-
-
 def is_consultation(message: str) -> bool:
     """判断消息是「询问制度」还是「下达指令」；指令标记优先。"""
     normalized = message.lower()
@@ -72,72 +79,6 @@ def risk_action(message: str) -> str | None:
     if action is None or is_consultation(message):
         return None
     return action
-
-
-def parse_departments(value: str) -> tuple[str, ...]:
-    """把部门字段解析成选择器元组，支持多部门（逗号分隔）。"""
-    return tuple(item.strip().lower() for item in (value or "").split(",") if item.strip())
-
-
-def department_visible(document_department: str, user_department: str) -> bool:
-    """文档部门可见性判定（权威口径）。
-
-    支持三种写法：
-    - ``all``            全员可见
-    - ``engineering``    单部门
-    - ``engineering,it`` 多部门；``engineering/*`` 表示该部门及其子树
-    """
-    user_department = (user_department or "").strip().lower()
-    for selector in parse_departments(document_department):
-        if selector == "all":
-            return True
-        if selector.endswith("/*"):
-            parent = selector[:-2]
-            if user_department == parent or user_department.startswith(f"{parent}/"):
-                return True
-        elif selector == user_department:
-            return True
-    return False
-
-
-def tokenize(text: str) -> set[str]:
-    """中文按字、英文按词做原型检索；生产环境应替换为 embedding + reranker。"""
-    chinese_chars = re.findall(r"[\u4e00-\u9fff]", text)
-    latin_words = re.findall(r"[a-zA-Z0-9]+", text.lower())
-    return set(chinese_chars + latin_words)
-
-
-def search_knowledge(db: Session, user: User, query: str, limit: int = 4) -> list[SearchHit]:
-    """先执行授权判断，再做匹配；模型永远拿不到越权 chunk。
-
-    密级用 IN 精确下推；部门因为要支持多部门与子树通配，SQL 侧只做「超集」预筛，
-    随后仍逐条调用 department_visible() 做权威校验，越权判定不会因为下推而放松。
-    """
-    query_terms = tokenize(query)
-    department_tokens = {(user.department or "").strip().lower(), "all"}
-    if "/" in (user.department or ""):
-        # 子部门账号（如 engineering/backend）要能看到父部门文档。
-        department_tokens.add(user.department.split("/", 1)[0].strip().lower())
-    statement = (
-        select(Chunk, Document)
-        .join(Document, Chunk.document_id == Document.id)
-        .where(
-            Document.sensitivity.in_(CLEARANCE_SENSITIVITIES[user.clearance]),
-            or_(*[Document.department.like(f"%{token}%") for token in sorted(department_tokens) if token]),
-        )
-    )
-    hits: list[SearchHit] = []
-    for chunk, document in db.execute(statement).all():
-        # 权威校验：SQL 预筛只是性能优化，越权判定以这里为准。
-        if RANK[document.sensitivity] > RANK[user.clearance]:
-            continue
-        if not department_visible(document.department, user.department):
-            continue
-        score = len(query_terms & tokenize(chunk.content + " " + document.title))
-        # 中文单字会偶然重合；至少 3 个共同项才算命中。
-        if score >= 3:
-            hits.append(SearchHit(document.id, document.title, chunk.content[:400], score))
-    return sorted(hits, key=lambda hit: hit.score, reverse=True)[:limit]
 
 
 TOOL = {
@@ -174,11 +115,22 @@ def qwen_request_options(reasoning_effort: str, *, initial_request: bool) -> dic
     return options
 
 
+def build_client(api_key: str) -> OpenAI:
+    """统一构造客户端：必须带超时与重试上限，避免上游卡住时请求无限期挂起。"""
+    settings = get_settings()
+    return OpenAI(
+        api_key=api_key,
+        base_url=settings.dashscope_base_url,
+        timeout=settings.qwen_timeout_seconds,
+        max_retries=settings.qwen_max_retries,
+    )
+
+
 def test_qwen_connection(api_key: str) -> tuple[bool, str]:
     """Make a minimal upstream request without storing or logging the supplied key."""
     settings = get_settings()
     try:
-        client = OpenAI(api_key=api_key, base_url=settings.dashscope_base_url, timeout=15.0)
+        client = build_client(api_key)
         client.responses.create(
             model=settings.qwen_model,
             input=[{"role": "user", "content": "只回复 OK"}],
@@ -192,16 +144,26 @@ def test_qwen_connection(api_key: str) -> tuple[bool, str]:
     return True, "连接成功，API Key 可用。"
 
 
-def run_agent(db: Session, user: User, message: str, api_key: str | None = None) -> tuple[str, list[dict], str]:
-    """返回 answer、citations、mode；工具始终在服务端再次执行授权过滤。"""
+def run_agent(
+    db: Session,
+    user: User,
+    message: str,
+    api_key: str | None = None,
+    retrieval_metrics: RetrievalMetrics | None = None,
+) -> tuple[str, list[dict], str]:
+    """返回 answer、citations、mode；工具始终在服务端再次执行授权过滤。
+
+    ``retrieval_metrics`` 由调用方传入时，检索层会把后端、耗时、候选数等写入其中，
+    便于把「为什么这次没召回」一并记进审计日志。
+    """
     settings = get_settings()
-    initial_hits = search_knowledge(db, user, message)
+    initial_hits = search_knowledge(db, user, message, metrics=retrieval_metrics)
     configured_key = api_key or settings.dashscope_api_key
     if not configured_key:
         return local_answer(initial_hits), citations_from_hits(initial_hits), "local"
 
     # 百炼兼容 OpenAI SDK；API Key 与 base_url 必须来自同一百炼地域/业务空间。
-    client = OpenAI(api_key=configured_key, base_url=settings.dashscope_base_url)
+    client = build_client(configured_key)
     instructions = (
         "You are AegisKB, an enterprise policy assistant. Answer in Chinese. "
         "You must call search_knowledge for policy facts, rely only on its results, cite document titles, "
@@ -216,7 +178,8 @@ def run_agent(db: Session, user: User, message: str, api_key: str | None = None)
             tools=[TOOL],
             **qwen_request_options(settings.qwen_reasoning_effort, initial_request=True),
         )
-    except OpenAIError:
+    except Exception:
+        # 上游超时、限流或网络异常统一降级到本地检索结果，不让请求失败。
         return local_answer(initial_hits), citations_from_hits(initial_hits), "local"
     all_hits = initial_hits
     tool_called = False
@@ -236,7 +199,7 @@ def run_agent(db: Session, user: User, message: str, api_key: str | None = None)
                 continue
             call = item
             args = json.loads(call.arguments)
-            all_hits = search_knowledge(db, user, args["query"])
+            all_hits = search_knowledge(db, user, args["query"], metrics=retrieval_metrics)
             payload = {"results": citations_from_hits(all_hits), "access_enforced": True}
             # 百炼要求 function_call_output 紧随对应的 function_call 传回。
             conversation.append({"type": "function_call", "name": call.name, "arguments": call.arguments, "call_id": call.call_id})
@@ -249,6 +212,6 @@ def run_agent(db: Session, user: User, message: str, api_key: str | None = None)
                 tools=[TOOL],
                 **qwen_request_options(settings.qwen_reasoning_effort, initial_request=False),
             )
-        except OpenAIError:
+        except Exception:
             return local_answer(all_hits), citations_from_hits(all_hits), "local"
     return "工具调用达到安全上限，已停止本次请求。请缩小问题范围后重试。", citations_from_hits(all_hits), "qwen"

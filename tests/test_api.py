@@ -5,6 +5,8 @@ os.environ["DATABASE_URL"] = "sqlite:///test_aegiskb.db"
 os.environ["JWT_SECRET"] = "test-secret"
 # 显式覆盖 .env 中可能存在的真实百炼密钥，保证测试只走本地模式。
 os.environ["DASHSCOPE_API_KEY"] = ""
+# 固定使用离线向量后端：结果确定、不依赖网络、不消耗 token。
+os.environ["EMBEDDING_PROVIDER"] = "offline"
 
 from fastapi.testclient import TestClient
 
@@ -146,7 +148,7 @@ def test_chat_passes_session_api_key_to_agent(monkeypatch):
 
     captured = {}
 
-    def fake_run_agent(db, user, message, api_key=None):
+    def fake_run_agent(db, user, message, api_key=None, retrieval_metrics=None):
         captured.update(message=message, api_key=api_key)
         return "测试回答", [], "local"
 
@@ -163,6 +165,7 @@ def test_chat_passes_session_api_key_to_agent(monkeypatch):
 
 def test_qwen_error_falls_back_to_local_answer(monkeypatch):
     from openai import OpenAIError
+
     from app import agent
     from app.db import SessionLocal, User
 
@@ -324,7 +327,7 @@ def test_policy_consultation_reaches_the_agent(monkeypatch):
 
     captured = {}
 
-    def fake_run_agent(db, user, message, api_key=None):
+    def fake_run_agent(db, user, message, api_key=None, retrieval_metrics=None):
         captured["message"] = message
         return "制度回答", [], "local"
 
@@ -472,7 +475,12 @@ def test_eval_dataset_is_wired_into_regression():
 
 
 def test_eval_dataset_expected_citations():
-    """对评测集中写明引用期望的用例，逐条核对检索结果。"""
+    """对评测集中写明引用期望的用例，逐条核对检索结果。
+
+    混合检索引入语义召回后，「无 ground truth」的用例（如 access-001）不再保证
+    返回空列表 —— 它会召回若干**有权阅读**的近似文档。这些用例的真实不变量是
+    「不得泄露越权文档」，因此改用「禁止出现」断言而不是「必须为空」。
+    """
     import json
     from pathlib import Path
 
@@ -480,12 +488,19 @@ def test_eval_dataset_expected_citations():
     from app.db import SessionLocal, User
 
     expected = {
-        "access-001": [],
         "access-002": ["2026 差旅报销制度"],
         "policy-001": ["远程办公制度"],
         "rag-002": ["员工入职与试用期管理办法"],
         "rag-003": ["备份与恢复演练规程"],
         "rag-004": ["网络与 VPN 接入管理"],
+    }
+    # 用户无权阅读的文档绝不能出现在引用里，哪怕语义上高度相近。
+    forbidden = {
+        "access-001": ["2026 差旅报销制度"],
+        "access-003": ["2026 差旅报销制度"],
+        "access-005": ["薪酬结构与调薪机制"],
+        "access-006": ["合同评审与用印管理办法"],
+        "injection-001": ["2026 差旅报销制度"],
     }
     path = Path(__file__).resolve().parents[1] / "data" / "evals.jsonl"
     cases = {
@@ -499,11 +514,213 @@ def test_eval_dataset_expected_citations():
         for case_id, titles in expected.items():
             case = cases[case_id]
             got = [hit.title for hit in search_knowledge(db, users[case["user"]], case["input"])]
-            if titles:
-                for title in titles:
-                    assert title in got, f"{case_id} 期望引用 {title}，实际 {got}"
-            else:
-                assert got == [], f"{case_id} 不应返回任何引用，实际 {got}"
+            for title in titles:
+                assert title in got, f"{case_id} 期望引用 {title}，实际 {got}"
+        for case_id, titles in forbidden.items():
+            case = cases[case_id]
+            got = [hit.title for hit in search_knowledge(db, users[case["user"]], case["input"])]
+            for title in titles:
+                assert title not in got, f"{case_id} 泄露了无权阅读的文档 {title}，实际 {got}"
     finally:
         db.close()
+
+
+def test_known_departments_do_not_drift_from_seed_data():
+    """部门白名单必须覆盖演示账号用到的全部部门，否则 seed 会写出非法数据。"""
+    from app.departments import KNOWN_DEPARTMENTS
+    from app.seed_data import DEMO_DOCUMENTS, DEMO_USERS
+
+    seeded = {user[2] for user in DEMO_USERS} | {
+        part.strip() for _, department, _, _ in DEMO_DOCUMENTS for part in department.split(",")
+    }
+    assert seeded - {"all"} <= set(KNOWN_DEPARTMENTS), f"白名单缺少：{sorted(seeded - set(KNOWN_DEPARTMENTS))}"
+
+
+def test_chunk_text_clamps_overlap_and_never_silently_drops_content():
+    """P0 回归：旧分块实现在 overlap >= size 时会静默返回空列表或直接抛 ValueError。"""
+    import pytest
+
+    from app.chunking import chunk_text
+
+    text = "。".join(f"第{index}条：本条规定了相应的管理要求" for index in range(1, 121))
+
+    with pytest.raises(ValueError):
+        chunk_text(text, size=0)
+
+    for size, overlap in ((350, 60), (100, 99), (100, 100), (100, 200)):
+        chunks = chunk_text(text, size=size, overlap=overlap)
+        assert chunks, f"size={size} overlap={overlap} 静默返回了空列表"
+        assert all(len(chunk) <= size for chunk in chunks), f"size={size} 存在超长片段"
+        joined = "".join(chunks)
+        # 首尾内容都必须还在，证明没有整段丢失。
+        assert "第1条" in joined
+        assert "第120条" in joined
+
+
+def test_documents_endpoint_rejects_unknown_department():
+    """P0 回归：部门名拼错必须 422，而不是入库成功却对所有人不可见。"""
+    finance = login("finance@example.com")
+    payload = {
+        "title": "审计用文档",
+        "body": "这篇文档用于验证部门字段校验，正文长度需要满足最小要求。",
+        "department": "enginering",
+        "sensitivity": "INTERNAL",
+    }
+    response = client.post("/api/v1/documents", json=payload, headers=auth(finance))
+    assert response.status_code == 422
+    assert "未知部门" in response.text
+
+
+def test_documents_endpoint_accepts_known_and_multi_department():
+    """合法部门写法都应入库成功，并且新文档立刻可被对应部门检索到。"""
+    from app.agent import search_knowledge
+    from app.db import Document, SessionLocal, User
+
+    finance = login("finance@example.com")
+    created: list[int] = []
+    try:
+        for department in ("all", "it", "engineering,it", "engineering/*"):
+            payload = {
+                "title": f"跨部门联调规范 {department}",
+                "body": "联调规范要求各团队在变更窗口内完成验证，并归档结果，正文长度满足最小要求。",
+                "department": department,
+                "sensitivity": "INTERNAL",
+            }
+            response = client.post("/api/v1/documents", json=payload, headers=auth(finance))
+            assert response.status_code == 201, response.text
+            body = response.json()
+            assert body["chunks"] >= 1
+            created.append(body["id"])
+
+        # 入库后应立即重建向量，确保新文档马上可检索（不能等到下次全量重建）。
+        with SessionLocal() as db:
+            operator = db.query(User).filter_by(email="ops@example.com").one()
+            titles = [hit.title for hit in search_knowledge(db, operator, "跨部门联调规范")]
+            assert any("跨部门联调规范" in title for title in titles), titles
+    finally:
+        with SessionLocal() as db:
+            for document_id in created:
+                document = db.get(Document, document_id)
+                if document is not None:
+                    db.delete(document)
+            db.commit()
+
+
+def test_documents_endpoint_requires_finance_or_admin():
+    employee = login("employee@example.com")
+    payload = {
+        "title": "越权入库尝试",
+        "body": "普通员工不应该能写入知识库，这篇文档用于验证角色校验的正文长度。",
+        "department": "all",
+        "sensitivity": "PUBLIC",
+    }
+    assert client.post("/api/v1/documents", json=payload, headers=auth(employee)).status_code == 403
+
+
+def test_retrieval_stats_requires_admin_and_hides_document_text():
+    finance = login("finance@example.com")
+    admin = login("admin@example.com")
+
+    assert client.get("/api/v1/retrieval/stats", headers=auth(finance)).status_code == 403
+
+    response = client.get("/api/v1/retrieval/stats", headers=auth(admin))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["backend"] in {"faiss", "numpy", "pgvector"}
+    assert "stored_vectors" in body
+    assert "chunks" in body
+    # 统计接口只返回汇总数字，绝不下发文档正文或标题。
+    assert "documents" not in body
+    assert "document" not in response.text.lower().replace("documents", "")
+
+
+def test_labeled_retrieval_evaluation_meets_quality_gate():
+    """带标注的检索评测：只有声明 relevant_titles 的用例进入召回分母。
+
+    这条同时是**发布质量闸门**：每个有标注的文档都必须落在其授权用户的 Top-K 里。
+    """
+    finance = login("finance@example.com")
+    admin = login("admin@example.com")
+
+    assert client.post("/api/v1/retrieval/evaluations", json={"top_k": 4}, headers=auth(finance)).status_code == 403
+
+    response = client.post("/api/v1/retrieval/evaluations", json={"top_k": 4}, headers=auth(admin))
+    assert response.status_code == 201
+    run = response.json()
+    assert run["total_cases"] == 19
+    # 19 条用例中有 7 条声明了 relevant_titles，其余是安全/审批用例，不进入召回分母。
+    assert run["evaluated_cases"] == 7
+    assert 0 <= run["recall_at_k"] <= 1
+    assert 0 <= run["hit_rate_at_k"] <= 1
+    assert run["pass_rate_at_k"] == 1.0, f"检索质量未达标：{run}"
+    assert len(run["results"]) == run["total_cases"]
+
+    history = client.get("/api/v1/retrieval/evaluations", headers=auth(admin))
+    assert history.status_code == 200
+    assert any(item["id"] == run["id"] for item in history.json())
+
+
+def test_retrieval_evaluation_history_limit_is_bounded():
+    admin = login("admin@example.com")
+    assert client.get("/api/v1/retrieval/evaluations", params={"limit": 5}, headers=auth(admin)).status_code == 200
+    assert client.get("/api/v1/retrieval/evaluations", params={"limit": 0}, headers=auth(admin)).status_code == 422
+    assert client.get("/api/v1/retrieval/evaluations", params={"limit": -1}, headers=auth(admin)).status_code == 422
+
+
+def test_approval_list_supports_status_and_keyword_filters():
+    """筛选必须在服务端执行，且「待处理」统计保持全量口径。"""
+    admin = login("admin@example.com")
+    everything = client.get("/api/v1/approvals", params={"page_size": 100}, headers=auth(admin))
+    assert everything.status_code == 200
+    total = int(everything.headers["X-Total-Count"])
+    assert total >= 100
+
+    pending = client.get("/api/v1/approvals", params={"status": "PENDING", "page_size": 100}, headers=auth(admin))
+    assert pending.status_code == 200
+    assert pending.json(), "种子数据里应当有待处理审批单"
+    assert all(item["status"] == "PENDING" for item in pending.json())
+    assert int(pending.headers["X-Total-Count"]) < total
+    # 待处理总数是待办计数，不随筛选变化。
+    assert pending.headers["X-Total-Pending"] == everything.headers["X-Total-Pending"]
+
+    rejected = client.get("/api/v1/approvals", params={"status": "REJECTED", "page_size": 100}, headers=auth(admin))
+    assert all(item["status"] == "REJECTED" for item in rejected.json())
+
+    keyword = client.get("/api/v1/approvals", params={"keyword": "客户联系人", "page_size": 100}, headers=auth(admin))
+    assert keyword.status_code == 200
+    assert keyword.json(), "关键词应能命中种子数据"
+    for item in keyword.json():
+        assert "客户联系人" in item["payload"]["message"]
+
+    # 非法状态值应被参数校验拒绝。
+    assert client.get("/api/v1/approvals", params={"status": "UNKNOWN"}, headers=auth(admin)).status_code == 422
+
+
+def test_login_is_rate_limited_after_repeated_failures():
+    """连续登录失败达到阈值后返回 429，避免固定演示口令被在线爆破。"""
+    from app import main
+
+    main._login_failures.clear()
+    try:
+        for _ in range(main.LOGIN_MAX_FAILURES):
+            response = client.post(
+                "/api/v1/auth/login", json={"email": "employee@example.com", "password": "wrong-password"}
+            )
+            assert response.status_code == 401
+
+        blocked = client.post(
+            "/api/v1/auth/login", json={"email": "employee@example.com", "password": "wrong-password"}
+        )
+        assert blocked.status_code == 429
+        # 进入封禁窗口后，即使口令正确也应被拦下。
+        assert client.post(
+            "/api/v1/auth/login", json={"email": "employee@example.com", "password": "demo-password"}
+        ).status_code == 429
+    finally:
+        main._login_failures.clear()
+
+    # 窗口清空后恢复正常。
+    assert client.post(
+        "/api/v1/auth/login", json={"email": "employee@example.com", "password": "demo-password"}
+    ).status_code == 200
 

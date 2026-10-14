@@ -3,6 +3,11 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 aegiskb.db
 test_aegiskb.db
 *.db
+
+# 评测与压测产物：由 scripts/*.py 重新生成，不应入库
+output/

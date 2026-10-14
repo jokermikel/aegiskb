@@ -118,6 +118,12 @@
     .page-button:hover:not(:disabled) { border-color:#9fc8ae; color:var(--accent-dark); }
     .page-button:disabled { opacity:.5; cursor:not-allowed; }
     .page-info { color:var(--muted); font-size:12px; }
+    .source-badge { display:inline-block; margin-top:9px; padding:3px 9px; border-radius:999px; background:#eef4f0; color:#5c7a68; font-size:10px; letter-spacing:.03em; }
+    .source-badge.is-fallback { background:#fdf2e3; color:#a9662a; }
+    .source-badge.is-approval { background:#fdecea; color:#b74c3c; }
+    .approval-toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .approval-toolbar select, .approval-toolbar input { border:1px solid var(--line); border-radius:8px; padding:8px 11px; font-size:12px; color:#384a40; background:#fff; }
+    .approval-toolbar input { flex:1 1 220px; min-width:160px; }
     .login-screen { position:fixed; inset:0; display:grid; place-items:center; padding:20px; background:#f3f7f3; z-index:10; }
     .login-card { width:min(430px,100%); background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:35px; }
     .login-card .brand { padding:0; margin-bottom:28px; }
@@ -180,6 +186,7 @@
       <section id="approvalsWorkspace" class="workspace approvals-workspace hidden">
         <div class="approval-heading"><div><div class="welcome-kicker">APPROVAL WORKFLOW</div><h3>审批列表</h3><p id="approvalDescription">查看你提交的高风险操作审批状态。</p></div><button id="refreshApprovals" class="refresh-approvals" type="button">刷新列表</button></div>
         <div class="approval-summary" aria-label="审批统计"><div class="summary-item"><span>全部</span><strong id="approvalTotal">0</strong></div><div class="summary-item"><span>待处理</span><strong id="approvalPending">0</strong></div><div class="summary-item"><span>已处理</span><strong id="approvalDecided">0</strong></div></div>
+        <div class="approval-toolbar"><select id="approvalStatusFilter" aria-label="按状态筛选"><option value="">全部状态</option><option value="PENDING">待处理</option><option value="APPROVED">已批准</option><option value="REJECTED">已拒绝</option></select><input id="approvalKeyword" type="search" placeholder="按请求内容搜索…" aria-label="按请求内容搜索"><button id="approvalSearchClear" class="page-button" type="button">清空筛选</button></div>
         <div id="approvalFeedback" class="approval-feedback" aria-live="polite"></div>
         <div id="approvalTableWrap" class="approval-table-wrap hidden"><table class="approval-table"><thead><tr><th>编号</th><th>请求内容</th><th>提交人</th><th>提交时间</th><th>状态 / 意见</th><th>审批操作</th></tr></thead><tbody id="approvalRows"></tbody></table></div>
         <div id="approvalEmpty" class="approval-empty hidden"><strong>暂无审批单</strong><span>高风险导出、删除或发送请求会在这里生成审批记录。</span></div>
@@ -205,8 +212,9 @@
     </form>
   </div>
   <script>
-    const state = { token: sessionStorage.getItem('aegiskb_token'), user: null, apiKey: sessionStorage.getItem('aegiskb_dashscope_key') || '', conversations: [], currentId: null, approvals: [], approvalTotal: 0, approvalPendingTotal: 0, approvalPage: 1, approvalPageSize: 10, view: 'chat', modalMode: 'create', editingId: null };
+    const state = { token: sessionStorage.getItem('aegiskb_token'), user: null, apiKey: sessionStorage.getItem('aegiskb_dashscope_key') || '', conversations: [], currentId: null, approvals: [], approvalTotal: 0, approvalPendingTotal: 0, approvalPage: 1, approvalPageSize: 10, approvalStatus: '', approvalKeyword: '', view: 'chat', modalMode: 'create', editingId: null };
     const $ = (id) => document.getElementById(id);
+    let approvalSearchTimer = null;
     const conversationKey = () => `aegiskb_conversations_${state.user.email}`;
     const currentKey = () => `aegiskb_current_${state.user.email}`;
     const newId = () => (window.crypto?.randomUUID ? crypto.randomUUID() : `conversation-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -259,6 +267,8 @@
       const bubble = document.createElement('div'); bubble.className = 'bubble'; bubble.textContent = text;
       if (data.citations?.length) { const refs = document.createElement('div'); refs.className = 'citations'; data.citations.forEach(citation => { const ref = document.createElement('div'); ref.className = 'citation'; const title = document.createElement('strong'); title.textContent = `来源 · ${citation.title || ''}`; ref.append(title, document.createTextNode(citation.excerpt || '')); refs.appendChild(ref); }); bubble.appendChild(refs); }
       if (data.requires_approval) { const note = document.createElement('div'); note.className = 'approval'; note.textContent = `审批单 #${data.approval_id} 已创建，批准前不会执行外部操作。`; bubble.appendChild(note); }
+      // 明确标注回答来源：本地兜底与模型生成的信任级别不同，用户有权知道。
+      if (role === 'assistant' && data.mode) { const badge = document.createElement('div'); const labels = { qwen: '模型生成 · Qwen', local: '本地检索兜底 · 未调用模型', approval: '已转人工审批' }; badge.className = `source-badge${data.mode === 'approval' ? ' is-approval' : data.mode === 'local' ? ' is-fallback' : ''}`; badge.textContent = labels[data.mode] || data.mode; bubble.appendChild(badge); }
       row.append(avatar, bubble); $('messages').appendChild(row);
     }
     function addMessage(role, text, data = {}, persist = true) { renderMessage(role, text, data); if (persist && state.user) { const conversation = currentConversation(); if (!conversation) return; conversation.messages.push({ role, text, data }); conversation.updatedAt = Date.now(); persistConversations(); renderHistory(); } $('messages').scrollTop = $('messages').scrollHeight; }
@@ -324,6 +334,8 @@
       if (showLoading) { $('approvalFeedback').className = 'approval-feedback'; $('approvalFeedback').textContent = '正在加载审批列表...'; $('refreshApprovals').disabled = true; }
       try {
         const query = new URLSearchParams({ page: String(state.approvalPage), page_size: String(state.approvalPageSize) });
+        if (state.approvalStatus) query.set('status', state.approvalStatus);
+        if (state.approvalKeyword.trim()) query.set('keyword', state.approvalKeyword.trim());
         const response = await fetch(`/api/v1/approvals?${query}`, { headers: { 'Authorization': `Bearer ${state.token}` } });
         if (response.status === 401) { logout(); throw new Error('登录已过期，请重新登录'); }
         const data = await response.json();
@@ -334,7 +346,7 @@
         // 例如最后一页被清空时，自动回退到上一页。
         if (!data.length && state.approvalPage > 1) return loadApprovals(showLoading, state.approvalPage - 1);
         renderApprovals();
-        if (showLoading) $('approvalFeedback').textContent = `已更新，第 ${state.approvalPage} 页，共 ${state.approvalTotal} 条审批记录。`;
+        if (showLoading) $('approvalFeedback').textContent = `已更新，第 ${state.approvalPage} 页，共 ${state.approvalTotal} 条${state.approvalStatus || state.approvalKeyword.trim() ? '（已筛选）' : ''}审批记录。`;
       } catch (error) { $('approvalFeedback').className = 'approval-feedback error'; $('approvalFeedback').textContent = error.message; }
       finally { $('refreshApprovals').disabled = false; }
     }
@@ -375,7 +387,8 @@
       if (state.user) { localStorage.removeItem(conversationKey()); localStorage.removeItem(currentKey()); }
       sessionStorage.removeItem('aegiskb_token'); sessionStorage.removeItem('aegiskb_email'); sessionStorage.removeItem('aegiskb_dashscope_key');
       state.token = null; state.user = null; state.apiKey = ''; state.conversations = []; state.currentId = null;
-      state.approvals = []; state.approvalTotal = 0; state.approvalPendingTotal = 0; state.approvalPage = 1; state.view = 'chat';
+      state.approvals = []; state.approvalTotal = 0; state.approvalPendingTotal = 0; state.approvalPage = 1; state.approvalStatus = ''; state.approvalKeyword = ''; state.view = 'chat';
+      $('approvalStatusFilter').value = ''; $('approvalKeyword').value = '';
       updateApprovalSummary(); setVisible(false);
     }
     $('loginForm').addEventListener('submit', async event => { event.preventDefault(); $('loginError').textContent = ''; try { await login($('email').value.trim(), $('password').value); } catch (error) { $('loginError').textContent = error.message; } });
@@ -383,7 +396,7 @@
     $('messageInput').addEventListener('input', () => { const input = $('messageInput'); input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 140)}px`; });
     $('messageInput').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); } });
     document.querySelectorAll('.suggestion').forEach(button => button.addEventListener('click', () => sendMessage(button.dataset.question)));
-    $('newChat').addEventListener('click', () => openConversationModal('create')); $('approvalNav').addEventListener('click', () => showView('approvals')); $('refreshApprovals').addEventListener('click', () => loadApprovals()); $('approvalPrev').addEventListener('click', () => loadApprovals(true, state.approvalPage - 1)); $('approvalNext').addEventListener('click', () => loadApprovals(true, state.approvalPage + 1)); $('logout').addEventListener('click', logout); $('modalCancel').addEventListener('click', closeConversationModal); $('apiKeySettings').addEventListener('click', openApiKeyModal); $('apiKeyCancel').addEventListener('click', closeApiKeyModal); $('apiKeyTest').addEventListener('click', testApiKey);
+    $('newChat').addEventListener('click', () => openConversationModal('create')); $('approvalNav').addEventListener('click', () => showView('approvals')); $('refreshApprovals').addEventListener('click', () => loadApprovals()); $('approvalPrev').addEventListener('click', () => loadApprovals(true, state.approvalPage - 1)); $('approvalNext').addEventListener('click', () => loadApprovals(true, state.approvalPage + 1)); $('approvalStatusFilter').addEventListener('change', () => { state.approvalStatus = $('approvalStatusFilter').value; loadApprovals(true, 1); }); $('approvalKeyword').addEventListener('input', () => { state.approvalKeyword = $('approvalKeyword').value; clearTimeout(approvalSearchTimer); approvalSearchTimer = setTimeout(() => loadApprovals(true, 1), 300); }); $('approvalSearchClear').addEventListener('click', () => { $('approvalStatusFilter').value = ''; $('approvalKeyword').value = ''; state.approvalStatus = ''; state.approvalKeyword = ''; loadApprovals(true, 1); }); $('logout').addEventListener('click', logout); $('modalCancel').addEventListener('click', closeConversationModal); $('apiKeySettings').addEventListener('click', openApiKeyModal); $('apiKeyCancel').addEventListener('click', closeApiKeyModal); $('apiKeyTest').addEventListener('click', testApiKey);
     $('conversationModal').addEventListener('click', event => { if (event.target === $('conversationModal')) closeConversationModal(); });
     $('apiKeyModal').addEventListener('click', event => { if (event.target === $('apiKeyModal')) closeApiKeyModal(); });
     $('conversationForm').addEventListener('submit', event => { event.preventDefault(); const title = $('conversationName').value.trim(); if (!title) return; if (state.modalMode === 'rename') { const conversation = state.conversations.find(item => item.id === state.editingId); if (conversation) { conversation.title = title; conversation.updatedAt = Date.now(); persistConversations(); renderHistory(); renderMessages(); } } else createConversation(title); closeConversationModal(); });

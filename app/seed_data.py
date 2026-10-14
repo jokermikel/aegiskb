@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # 演示账号统一密码，仅用于本地演示。
 DEMO_PASSWORD = "demo-password"
@@ -221,7 +221,7 @@ def build_approval_samples(
     rng = random.Random(seed)
     statuses = list(APPROVAL_STATUS_PLAN)
     rng.shuffle(statuses)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     actions = list(APPROVAL_ACTIONS)
 
     samples: list[dict] = []

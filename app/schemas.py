@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from .departments import validate_department_selectors
 
 # 限定密级取值，避免客户端把密级写成任意字符串。
 Sensitivity = Literal["PUBLIC", "INTERNAL", "CONFIDENTIAL"]
@@ -29,6 +31,12 @@ class DocumentCreate(BaseModel):
     body: str = Field(min_length=20, max_length=100_000)
     department: str = "all"
     sensitivity: Sensitivity = "INTERNAL"
+
+    @field_validator("department")
+    @classmethod
+    def department_must_be_known(cls, value: str) -> str:
+        """部门名不在白名单内直接 422，避免入库成功却对所有人不可见的静默失效。"""
+        return validate_department_selectors(value)
 
 
 class ChatRequest(BaseModel):
@@ -75,3 +83,9 @@ class ApprovalOut(BaseModel):
     requester_email: str
     created_at: datetime
     comment: str | None
+
+
+class RetrievalEvaluationRequest(BaseModel):
+    """离线检索评测的入参；top_k 与检索工具默认值保持一致。"""
+
+    top_k: int = Field(default=4, ge=1, le=20)

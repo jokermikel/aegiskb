@@ -1,0 +1,28 @@
+[project]
+name = "aegiskb"
+version = "1.0.0"
+description = "AegisKB：面向企业制度问答的安全型知识库助手原型"
+requires-python = ">=3.11"
+# 运行依赖以 requirements.txt 为准（Docker 构建直接安装它），这里不重复声明。
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+exclude = [".venv", "migrations/versions", "output"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+# E501 交给 line-length 控制：中文注释按显示宽度折算容易误报。
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试与脚本需要在设置 sys.path / 环境变量之后才能导入应用模块，
+# 因此允许导入不出现在文件顶部。
+"tests/*" = ["E402"]
+"scripts/*" = ["E402"]
+"migrations/env.py" = ["E402"]

@@ -24,6 +24,9 @@ __pycache__/
 *.db
 *.sqlite3
 
+# 评测与压测产物（由 scripts/*.py 重新生成）
+output/
+
 # 版本控制与 IDE
 .git/
 .gitignore
