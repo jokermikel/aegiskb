@@ -362,8 +362,21 @@ def decide_approval(approval_id: int, payload: ApprovalDecision, db: Db, user: A
 
 
 @app.get("/api/v1/audit-logs")
-def audit_logs(db: Db, _: Annotated[User, Depends(require_roles("admin"))], limit: int = Query(50, ge=1, le=200)) -> list[dict]:
-    # 用 Query(ge=1, le=200) 夹紧取值：负数会让 SQLite 的 LIMIT -1 变成不限行数，
-    # 从而绕过 200 条上限，这里直接在参数校验层拒绝越界取值。
-    rows = db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
+def audit_logs(
+    db: Db,
+    _: Annotated[User, Depends(require_roles("admin"))],
+    response: Response,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[dict]:
+    """分页查看审计日志。
+
+    limit 用 Query(ge=1, le=200) 夹紧取值：负数会让 SQLite 的 LIMIT -1 变成不限行数，
+    从而绕过 200 条上限。审计表只增不减，因此必须支持 offset 翻页，
+    长期清理交给 scripts/prune_audit_logs.py。
+    """
+    response.headers["X-Total-Count"] = str(db.scalar(select(func.count(AuditLog.id))) or 0)
+    rows = db.scalars(
+        select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).offset(offset).limit(limit)
+    ).all()
     return [{"id": row.id, "request_id": row.request_id, "actor_id": row.actor_id, "event": row.event, "metadata": row.metadata_json, "created_at": row.created_at} for row in rows]

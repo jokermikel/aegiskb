@@ -28,6 +28,12 @@ DEMO_USERS: list[tuple[str, str, str, str]] = [
     ("it@example.com", "employee", "it", "CONFIDENTIAL"),
     ("auditor@example.com", "admin", "security", "INTERNAL"),
     ("controller@example.com", "finance", "finance", "INTERNAL"),
+    # 以下三个账号专门用来覆盖 engineering / hr / sales 的 CONFIDENTIAL 文档。
+    # 缺少它们时，这三个部门的机密文档没有任何账号可读 —— 演示时会表现为
+    # 「库里明明有文档却搜不到」，很难判断是检索故障还是权限问题。
+    ("tech-lead@example.com", "employee", "engineering", "CONFIDENTIAL"),
+    ("hrbp@example.com", "employee", "hr", "CONFIDENTIAL"),
+    ("sales-manager@example.com", "employee", "sales", "CONFIDENTIAL"),
 ]
 
 # (标题, 部门, 密级, 正文)

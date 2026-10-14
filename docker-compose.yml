@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector 镜像自带 vector 扩展，让检索可以走原生向量列而不是退化成 NumPy/FAISS。
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: aegiskb
       POSTGRES_USER: aegis
@@ -20,11 +21,21 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://aegis:aegis-local-only@db:5432/aegiskb
-      JWT_SECRET: local-demo-change-me
+      # 生产口径：结构由容器启动时的 `alembic upgrade head` 管理，
+      # 因此必须关闭自动建表（配置层会校验这个组合，写错直接启动失败）。
+      APP_ENV: production
+      AUTO_CREATE_SCHEMA: "false"
+      JWT_SECRET: ${JWT_SECRET:-local-demo-change-me}
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
       DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       QWEN_MODEL: ${QWEN_MODEL:-qwen3.8-max}
       QWEN_REASONING_EFFORT: ${QWEN_REASONING_EFFORT:-none}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-auto}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v4}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-10}
+      RETRIEVAL_MIN_SCORE: ${RETRIEVAL_MIN_SCORE:-}
+      RETRIEVAL_MODE: ${RETRIEVAL_MODE:-hybrid}
     depends_on:
       db:
         condition: service_healthy

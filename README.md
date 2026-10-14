@@ -44,8 +44,12 @@ docker compose up --build
 
 ## 演示数据
 
-空数据库首次启动时会自动导入演示数据：**10 个账号、50 篇企业制度文档、100 条审批单样例**。
+空数据库首次启动时会自动导入演示数据：**13 个账号、50 篇企业制度文档、100 条审批单样例**。
 文档覆盖全员及八个部门、三档密级；审批单包含 55 条待处理、25 条已批准、20 条已拒绝。
+
+每篇文档都至少有一个账号可读（这条由测试强制保证）。为此在 `engineering`、`hr`、`sales`
+各补了一个 CONFIDENTIAL 密级的账号 —— 否则这三个部门的机密文档没有任何账号能读到，
+演示时会表现为「库里明明有文档却搜不到」。
 
 | 邮箱 | 角色 | 部门 | 访问密级 | 可见制度 |
 | --- | --- | --- | --- | --- |
@@ -54,11 +58,14 @@ docker compose up --build
 | `admin@example.com` | admin | security | CONFIDENTIAL | 13 |
 | `hr@example.com` | employee | hr | INTERNAL | 11 |
 | `legal@example.com` | employee | legal | CONFIDENTIAL | 12 |
-| `it@example.com` | employee | it | CONFIDENTIAL | 10 |
 | `sales@example.com` | employee | sales | INTERNAL | 8 |
 | `ops@example.com` | employee | ops | INTERNAL | 9 |
+| `it@example.com` | employee | it | CONFIDENTIAL | 10 |
 | `auditor@example.com` | admin | security | INTERNAL | 9 |
 | `controller@example.com` | finance | finance | INTERNAL | 8 |
+| `tech-lead@example.com` | employee | engineering | CONFIDENTIAL | 15 |
+| `hrbp@example.com` | employee | hr | CONFIDENTIAL | 14 |
+| `sales-manager@example.com` | employee | sales | CONFIDENTIAL | 10 |
 
 所有账户密码均为 `demo-password`。数据集维护在 `app/seed_data.py`，审批单使用固定随机种子生成，
 可重复复现；若要重新灌入数据，删除 `aegiskb.db` 后重启服务即可。
@@ -75,7 +82,7 @@ docker compose up --build
 | `GET` | `/api/v1/approvals` | 分页查看审批单（`page`、`page_size`、`status`、`keyword`；总数与待处理数见 `X-Total-Count` / `X-Total-Pending`） |
 | `POST` | `/api/v1/approvals/{id}/decision` | 管理员批准/拒绝 |
 | `POST` | `/api/v1/documents` | finance/admin 文档入库（会校验部门合法性并立即建立向量索引） |
-| `GET` | `/api/v1/audit-logs` | 管理员查看审计日志（`limit` 取值范围 1–200） |
+| `GET` | `/api/v1/audit-logs` | 管理员查看审计日志（`limit` 1–200、`offset` ≥ 0，总数见 `X-Total-Count`） |
 | `GET` | `/api/v1/retrieval/stats` | 管理员查看向量后端与索引新鲜度（不含任何文档正文） |
 | `POST` | `/api/v1/retrieval/evaluations` | 管理员跑一次离线检索评测并持久化指标 |
 | `GET` | `/api/v1/retrieval/evaluations` | 管理员查看历史评测记录 |
@@ -91,11 +98,16 @@ docker compose up --build
 ## 检索与评测
 
 ```bash
-python scripts/run_eval.py --top-k 4      # 跑评测集，写入 output/evaluation/latest.json
-python scripts/benchmark.py               # 对运行中的实例做端到端压测
+python scripts/run_eval.py --top-k 4            # 跑评测集，写入 output/evaluation/latest.json
+python scripts/benchmark.py                     # 对运行中的实例做端到端压测
+python scripts/prune_audit_logs.py --days 180   # 预演清理过期审计日志（加 --apply 才真正删除）
 ```
 
-`data/evals.jsonl` 中只有声明了 `relevant_titles` 的用例才进入 Recall@K 分母；安全与审批用例留在同一份数据集里做更广的回归，但不干扰检索指标。`tests/test_api.py` 会把这份数据集整体接入自动断言，因此它同时是回归套件与质量闸门。
+`data/evals.jsonl` 收录 46 条用例，其中 32 条声明了 `relevant_titles` 并据此进入 Recall@K
+分母；安全与审批用例留在同一份数据集里做更广的回归，但不干扰检索指标。测试会强制保证
+**每个部门都有带标注用例**、且**每条用例引用的文档对应用户真的有权阅读**（否则那条用例永远不可能通过）。
+
+`tests/test_api.py` 会把这份数据集整体接入自动断言，因此它同时是回归套件与发布质量闸门。
 
 ## 数据库迁移
 
@@ -106,6 +118,11 @@ alembic upgrade head        # 应用迁移
 alembic revision --autogenerate -m "描述本次结构变更"   # 生成新迁移
 ```
 
+`APP_ENV=production` 与 `AUTO_CREATE_SCHEMA=true` 的组合会在配置加载阶段直接报错 ——
+自动建表会让库里读不到 `alembic_version`，迁移历史与真实结构从此脱钩，属于必须在启动阶段
+就拦下的配置错误。Docker 镜像的启动命令已经先执行 `alembic upgrade head`，并在 compose 里
+关闭了自动建表。
+
 启动时会比对我模型定义与实际库结构（`detect_schema_drift()`）。一旦发现缺表或缺字段，服务会直接报错并提示执行 `alembic upgrade head`，不再出现「模型改了但库里静默不生效」的情况。
 
 ## 测试与 CI
@@ -115,7 +132,7 @@ ruff check .        # 代码检查
 pytest -q           # 单元与安全行为测试
 ```
 
-测试使用独立数据库、清空 API Key，并强制离线向量后端，覆盖授权边界、审批流转、审批前置语义、入库校验、分块边界、分页与筛选、登录限流、迁移一致性与 `data/evals.jsonl` 评测样例，共 34 个用例。
+测试使用独立数据库、清空 API Key，并强制离线向量后端，覆盖授权边界、审批流转、审批前置语义、入库校验、分块边界、分页与筛选、登录限流、迁移一致性、评测集覆盖率与 `data/evals.jsonl` 评测样例，共 40 个用例。`tests/conftest.py` 会在每次会话开始时把测试库清零，避免残留数据造成莫名失败。
 
 `.github/workflows/ci.yml` 会在每次推送时依次跑 ruff、`alembic upgrade head && alembic check`、pytest 与评测质量闸门。
 
@@ -141,8 +158,8 @@ app/seed_data.py     # 演示数据集（10 账号 / 50 篇制度 / 100 条审�
 app/static/          # Web 界面
 data/evals.jsonl     # 带标注的评测集（已接入自动断言）
 migrations/          # Alembic 迁移脚本
-scripts/             # run_eval.py / benchmark.py
-tests/               # API、检索、安全行为、授权矩阵与数据规模测试
+scripts/             # run_eval.py / benchmark.py / prune_audit_logs.py
+tests/               # API、检索、安全行为、授权矩阵与数据规模测试（conftest.py 每次清零测试库）
 .github/workflows/   # CI（ruff + 迁移检查 + pytest + 评测闸门）
 ```
 

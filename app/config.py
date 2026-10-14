@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,6 +44,21 @@ class Settings(BaseSettings):
     def blank_score_is_unset(cls, value):
         """`.env` 里写成 `RETRIEVAL_MIN_SCORE=` 时视为未设置，而不是类型错误。"""
         return None if value == "" else value
+
+    @model_validator(mode="after")
+    def forbid_auto_schema_in_production(self) -> "Settings":
+        """生产环境禁止靠 create_all 建表。
+
+        自动建表会绕过 Alembic：库里读不到 alembic_version，迁移历史与真实结构
+        从此脱钩，后续任何一次 `alembic upgrade` 都可能建出错误的结构。
+        这类配置错误必须在启动阶段就炸掉，而不是等到某次上线才发现。
+        """
+        if self.app_env.strip().lower() in {"production", "prod"} and self.auto_create_schema:
+            raise ValueError(
+                "APP_ENV=production 时 AUTO_CREATE_SCHEMA 必须为 false；"
+                "生产环境请改用 `alembic upgrade head` 管理数据库结构。"
+            )
+        return self
 
 
 @lru_cache

@@ -192,10 +192,10 @@ def test_qwen_error_falls_back_to_local_answer(monkeypatch):
     assert any(item["title"] == "远程办公制度" for item in citations)
 
 def test_seed_dataset_volume():
-    """演示数据集固定为 10 个账号、50 篇文档、100 条审批单，标题不重复。"""
+    """演示数据集固定为 13 个账号、50 篇文档、100 条审批单，标题不重复。"""
     from app.seed_data import DEMO_DOCUMENTS, DEMO_USERS, build_approval_samples
 
-    assert len(DEMO_USERS) == 10
+    assert len(DEMO_USERS) == 13
     assert len(DEMO_DOCUMENTS) == 50
     titles = [title for title, *_ in DEMO_DOCUMENTS]
     assert len(set(titles)) == 50
@@ -212,6 +212,27 @@ def test_seed_dataset_volume():
         decided = sample["status"] != "PENDING"
         assert (sample["comment"] is not None) is decided
         assert (sample["decided_at"] is not None) is decided
+
+
+def test_every_seeded_document_is_readable_by_at_least_one_account():
+    """每篇演示文档都必须至少有一个账号能读到。
+
+    这里曾经漏掉 7 篇：engineering / hr / sales 的 CONFIDENTIAL 文档，而这三个部门
+    唯一的账号只有 INTERNAL 密级 —— 演示时会表现为「库里明明有文档却搜不到」，
+    很容易被误判成检索故障。部门覆盖之外还要有密级覆盖。
+    """
+    from app.agent import RANK, department_visible
+    from app.seed_data import DEMO_DOCUMENTS, DEMO_USERS
+
+    unreachable = [
+        title
+        for title, department, sensitivity, _ in DEMO_DOCUMENTS
+        if not any(
+            RANK[sensitivity] <= RANK[clearance] and department_visible(department, user_department)
+            for _, _, user_department, clearance in DEMO_USERS
+        )
+    ]
+    assert unreachable == [], f"以下文档没有任何账号可读：{unreachable}"
 
 
 def test_seed_dataset_is_loaded_into_database():
@@ -440,17 +461,28 @@ def test_schema_matches_models_in_test_database():
     assert detect_schema_drift() == []
 
 
-def test_eval_dataset_is_wired_into_regression():
-    """让 data/evals.jsonl 接入自动化回归，不再是没有消费方的摆设。"""
+def _eval_dataset_summary() -> tuple[list[dict], list[dict]]:
+    """读取评测集并派生「用例总数」与「带标注用例数」。
+
+    计数从文件派生而不是写死：数据集扩充时测试不该跟着假失败，
+    但下限断言仍然能拦住误删。
+    """
     import json
     from pathlib import Path
 
+    path = Path(__file__).resolve().parents[1] / "data" / "evals.jsonl"
+    cases = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return cases, [case for case in cases if case.get("relevant_titles")]
+
+
+def test_eval_dataset_is_wired_into_regression():
+    """让 data/evals.jsonl 接入自动化回归，不再是没有消费方的摆设。"""
     from app.agent import RANK, department_visible, risk_action, search_knowledge
     from app.db import Document, SessionLocal, User
 
-    path = Path(__file__).resolve().parents[1] / "data" / "evals.jsonl"
-    cases = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert len(cases) >= 17, "评测集条目明显减少，请确认是否被误删"
+    cases, labeled = _eval_dataset_summary()
+    assert len(cases) == 46, "评测集条目数变化，请确认是一次有意的增删"
+    assert len(labeled) == 32, "带标注用例数变化，召回指标的分母会随之变动"
 
     db = SessionLocal()
     try:
@@ -472,6 +504,50 @@ def test_eval_dataset_is_wired_into_regression():
                 assert department_visible(document.department, user.department), f"{case['id']} 越部门"
     finally:
         db.close()
+
+
+def test_eval_dataset_covers_every_known_department():
+    """每个已知部门都必须有带标注用例，否则该部门的检索质量无人把关。
+
+    同时校验用例引用的文档确实存在，避免标注写错标题却悄悄拉低指标。
+    """
+    from app.departments import KNOWN_DEPARTMENTS
+    from app.seed_data import DEMO_DOCUMENTS
+
+    _, labeled = _eval_dataset_summary()
+    department_of = {title: department for title, department, _, _ in DEMO_DOCUMENTS}
+
+    covered: set[str] = set()
+    for case in labeled:
+        for title in case["relevant_titles"]:
+            assert title in department_of, f"{case['id']} 引用了不存在的文档：{title}"
+            department = department_of[title]
+            if department != "all":
+                covered.update(part.strip() for part in department.split(","))
+
+    missing = set(KNOWN_DEPARTMENTS) - covered
+    assert not missing, f"以下部门没有任何带标注评测用例：{sorted(missing)}"
+
+
+def test_eval_dataset_references_only_authorized_documents():
+    """每条带标注用例引用的文档，其账号都必须真的有权阅读。
+
+    否则这个用例永远不可能通过 —— 指标全绿却掩盖了一个不可能满足的期望。
+    """
+    from app.agent import RANK, department_visible
+    from app.seed_data import DEMO_DOCUMENTS, DEMO_USERS
+
+    _, labeled = _eval_dataset_summary()
+    access = {email: (department, clearance) for email, _, department, clearance in DEMO_USERS}
+    rules = {title: (department, sensitivity) for title, department, sensitivity, _ in DEMO_DOCUMENTS}
+
+    for case in labeled:
+        assert case["user"] in access, f"{case['id']} 引用了未知账号 {case['user']}"
+        user_department, clearance = access[case["user"]]
+        for title in case["relevant_titles"]:
+            department, sensitivity = rules[title]
+            assert RANK[sensitivity] <= RANK[clearance], f"{case['id']} 越密级标注：{title}"
+            assert department_visible(department, user_department), f"{case['id']} 越部门标注：{title}"
 
 
 def test_eval_dataset_expected_citations():
@@ -498,8 +574,11 @@ def test_eval_dataset_expected_citations():
     forbidden = {
         "access-001": ["2026 差旅报销制度"],
         "access-003": ["2026 差旅报销制度"],
+        "access-004": ["核心系统架构设计说明"],
         "access-005": ["薪酬结构与调薪机制"],
         "access-006": ["合同评审与用印管理办法"],
+        "access-007": ["核心系统架构设计说明"],
+        "access-008": ["报价折扣审批权限"],
         "injection-001": ["2026 差旅报销制度"],
     }
     path = Path(__file__).resolve().parents[1] / "data" / "evals.jsonl"
@@ -647,9 +726,11 @@ def test_labeled_retrieval_evaluation_meets_quality_gate():
     response = client.post("/api/v1/retrieval/evaluations", json={"top_k": 4}, headers=auth(admin))
     assert response.status_code == 201
     run = response.json()
-    assert run["total_cases"] == 19
-    # 19 条用例中有 7 条声明了 relevant_titles，其余是安全/审批用例，不进入召回分母。
-    assert run["evaluated_cases"] == 7
+    cases, labeled = _eval_dataset_summary()
+    assert run["total_cases"] == len(cases)
+    # 只有声明 relevant_titles 的用例进入召回分母，其余是安全/审批用例。
+    assert run["evaluated_cases"] == len(labeled)
+    assert run["evaluated_cases"] >= 30, "带标注用例太少，指标缺乏说服力"
     assert 0 <= run["recall_at_k"] <= 1
     assert 0 <= run["hit_rate_at_k"] <= 1
     assert run["pass_rate_at_k"] == 1.0, f"检索质量未达标：{run}"
@@ -726,6 +807,50 @@ def test_documents_endpoint_accepts_full_multi_department_list():
         finally:
             db.delete(document)
             db.commit()
+
+
+def test_production_environment_forbids_auto_schema_creation():
+    """生产环境必须走 Alembic 迁移。
+
+    靠 create_all 建表会让库里读不到 alembic_version，迁移历史与真实结构从此脱钩，
+    后续任意一次 `alembic upgrade` 都可能建出错误的结构 —— 这类配置错误必须在
+    启动阶段就炸掉。
+    """
+    import pytest
+    from pydantic import ValidationError
+
+    from app.config import Settings
+
+    with pytest.raises(ValidationError) as error:
+        Settings(app_env="production", auto_create_schema=True)
+    assert "AUTO_CREATE_SCHEMA" in str(error.value)
+
+    # 显式关闭后生产环境合法。
+    assert Settings(app_env="production", auto_create_schema=False).auto_create_schema is False
+    # 开发/演示环境仍允许自动建表，保证开箱即用。
+    assert Settings(app_env="development", auto_create_schema=True).auto_create_schema is True
+
+
+def test_audit_logs_support_pagination():
+    """审计表只增不减，必须能翻页；limit 越界仍要被参数校验拒绝。"""
+    admin = login("admin@example.com")
+    # 先制造足够多的审计记录，避免依赖其他用例的执行顺序。
+    for _ in range(6):
+        login("admin@example.com")
+
+    first = client.get("/api/v1/audit-logs", params={"limit": 5, "offset": 0}, headers=auth(admin))
+    assert first.status_code == 200
+    assert len(first.json()) == 5
+    total = int(first.headers["X-Total-Count"])
+    assert total >= 5
+
+    second = client.get("/api/v1/audit-logs", params={"limit": 5, "offset": 5}, headers=auth(admin))
+    assert second.status_code == 200
+    assert second.json(), "应该还有下一页"
+    assert {row["id"] for row in first.json()}.isdisjoint({row["id"] for row in second.json()})
+
+    assert client.get("/api/v1/audit-logs", params={"offset": -1}, headers=auth(admin)).status_code == 422
+    assert client.get("/api/v1/audit-logs", params={"limit": -1}, headers=auth(admin)).status_code == 422
 
 
 def test_login_is_rate_limited_after_repeated_failures():
