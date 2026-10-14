@@ -53,10 +53,13 @@ jobs:
           pytest -q -rEf --tb=short 2>&1 | tee pytest-output.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            # 把失败用例发成注解：公开仓库下无需登录即可通过 Checks API 读到，
+            # 把失败原因发成注解：公开仓库下无需登录即可通过 Checks API 读到，
             # 而完整 job 日志的下载接口需要仓库管理员权限，排查时很被动。
-            # 必须同时收 ERROR：退出码 2 表示收集阶段出错，而 -rf 不会显示它。
-            detail=$(grep -E '^(FAILED|ERROR)' pytest-output.log | head -6 | paste -sd '|' -)
+            # 收集阶段失败的堆栈比摘要行有用得多，优先抓它。
+            detail=$(awk '/ERROR collecting/{flag=1} flag' pytest-output.log | head -20 | paste -sd '|' -)
+            if [ -z "$detail" ]; then
+              detail=$(grep -E '^(FAILED|ERROR)' pytest-output.log | head -6 | paste -sd '|' -)
+            fi
             if [ -z "$detail" ]; then
               detail=$(tail -12 pytest-output.log | paste -sd '|' -)
             fi
