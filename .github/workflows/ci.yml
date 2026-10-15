@@ -1,9 +1,12 @@
 name: CI
 
 on:
+  # 只在 main 上触发：其他分支的推送不再产生 CI 运行与邮件通知。
   push:
-    branches: ["**"]
+    branches: [main]
+  # 面向 main 的 PR 仍然校验；没有 PR 就不会产生任何运行。
   pull_request:
+    branches: [main]
 
 jobs:
   check:
